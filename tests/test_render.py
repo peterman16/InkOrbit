@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from orbits_with_axes import orbits_scene
 from proof_of_style import proof_scene
 
 import inkorbit as ink
@@ -8,6 +9,11 @@ import inkorbit as ink
 @pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
 def test_proof_of_style():
     return proof_scene().render().figure
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_orbits_with_axes():
+    return orbits_scene().render().figure
 
 
 def test_data_axes_match_scene_coordinates():

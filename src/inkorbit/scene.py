@@ -22,6 +22,7 @@ HAlign = Literal["left", "center", "right"]
 VAlign = Literal["baseline", "bottom", "center", "top"]
 MarkerKind = Literal["dot", "open", "star", "cross"]
 Pattern = Literal["stipple", "hatch", "solid"]
+Direction = Literal["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 
 
 def _xy(value: ArrayLike2) -> np.ndarray:
@@ -80,7 +81,20 @@ class Text:
     bold: bool = False
 
 
-Item = Line | Fill | Arrowhead | Marker | Text
+@dataclass(frozen=True)
+class Label:
+    """Text placed automatically next to ``at`` so it does not overlap other ink."""
+
+    text: str
+    at: np.ndarray
+    prefer: Direction | None = None
+    priority: int = 0
+    height_mm: float | None = None
+    bold: bool = False
+    alternatives: np.ndarray | None = None  # other acceptable anchors, in order of preference
+
+
+Item = Line | Fill | Arrowhead | Marker | Text | Label
 
 
 @dataclass
@@ -93,6 +107,10 @@ class Scene:
     items: list[Item] = field(default_factory=list)
     caption: str | None = None
     limits: tuple[float, float, float, float] | None = None  # xmin, xmax, ymin, ymax
+    labels: bool = True  # draw automatic labels
+    axes: bool = False  # ruled border with ticks and numbers
+    grid: bool = False  # light grid at the tick positions
+    units: str | None = None  # appended to the axis numbers, e.g. "km"
 
     def add(self, item: Item) -> Item:
         self.items.append(item)
@@ -148,13 +166,32 @@ class Scene:
     ) -> Text:
         return self.add(Text(text, _xy(at), height_mm, ha, va, rotation_deg, offset_mm, bold))
 
+    def label(
+        self,
+        text: str,
+        at: ArrayLike2,
+        *,
+        prefer: Direction | None = None,
+        priority: int = 0,
+        height_mm: float | None = None,
+        bold: bool = False,
+        alternatives=None,
+    ) -> Label:
+        """Label a point. Placement avoids lines and other labels; ``prefer`` is a compass hint.
+
+        ``alternatives`` are other points the label may attach to instead (for
+        example further along the same orbit), tried in order if ``at`` is crowded.
+        """
+        alt = None if alternatives is None else np.asarray(alternatives, dtype=float).reshape(-1, 2)
+        return self.add(Label(text, _xy(at), prefer, priority, height_mm, bold, alt))
+
     def bounds(self) -> tuple[float, float, float, float]:
         """Data extent of everything that has a data position."""
         if self.limits is not None:
             return self.limits
         chunks = []
         for item in self.items:
-            if isinstance(item, (Line,)):
+            if isinstance(item, Line):
                 chunks.append(item.points)
             elif isinstance(item, Fill):
                 chunks.append(item.polygon)

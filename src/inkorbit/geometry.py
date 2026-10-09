@@ -35,6 +35,29 @@ def arc(center: tuple[float, float], radius: float, start: float, stop: float, n
     return np.column_stack([center[0] + radius * np.cos(t), center[1] + radius * np.sin(t)])
 
 
+def project_to_plane(points: np.ndarray) -> np.ndarray:
+    """Project 3D points onto their best-fit plane through the origin.
+
+    The result is 2D, with +x towards the closest point (periapsis for an orbit
+    around the origin) and the motion counter-clockwise, i.e. the perifocal view.
+    """
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != 3:
+        raise ValueError(f"expected an (N, 3) array, got shape {pts.shape}")
+    normal = np.linalg.svd(pts, full_matrices=False)[2][-1]
+    # Orient the normal along the angular momentum so the motion is counter-clockwise.
+    h = np.cross(pts[:-1], np.diff(pts, axis=0)).sum(axis=0)
+    if np.dot(normal, h) < 0:
+        normal = -normal
+    x = pts[np.argmin(np.linalg.norm(pts, axis=1))]
+    x = x - np.dot(x, normal) * normal
+    if np.linalg.norm(x) < 1e-12:
+        raise ValueError("cannot orient the plane: closest point is at the origin")
+    x /= np.linalg.norm(x)
+    y = np.cross(normal, x)
+    return np.column_stack([pts @ x, pts @ y])
+
+
 def rotate(points: np.ndarray, angle: float) -> np.ndarray:
     c, s = np.cos(angle), np.sin(angle)
     return np.asarray(points, dtype=float) @ np.array([[c, s], [-s, c]])

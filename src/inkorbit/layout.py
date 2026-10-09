@@ -12,10 +12,10 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from . import patterns
+from . import labels, patterns
 from .lettering import letter
-from .scene import Arrowhead, Fill, Line, Marker, Scene, Text
-from .style import DEFAULT_STYLE, Style
+from .scene import Arrowhead, Fill, Label, Line, Marker, Scene, Text
+from .style import AXIS, BORDER, DEFAULT_STYLE, GRID, Style
 
 # --- Pages -----------------------------------------------------------------------
 
@@ -59,6 +59,7 @@ class Stroke:
     points: np.ndarray  # page mm
     width_mm: float
     dash_mm: tuple[float, ...] | None = None
+    role: str | None = None  # the line role it came from, if any
 
 
 @dataclass(frozen=True)
@@ -104,30 +105,55 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
     style = style or DEFAULT_STYLE
     page = as_page(page)
 
+    left = right = top = page.margin_mm
     bottom = page.margin_mm
     if scene.caption:
         bottom += style.caption_height_mm + style.caption_gap_mm
-    box_w = page.width_mm - 2 * page.margin_mm
-    box_h = page.height_mm - page.margin_mm - bottom
-    if box_w <= 0 or box_h <= 0:
-        raise ValueError("page is too small for its margins and caption")
+    if scene.axes:
+        # Room for the tick numbers below the border and the units beside them.
+        bottom += style.text_height_mm + 3.0
+        if scene.units:
+            right += letter(scene.units, style.text_height_mm, style.font).width + 2.0
 
     xmin, xmax, ymin, ymax = scene.bounds()
     if scene.limits is None:
         dx, dy = (xmax - xmin) or 1.0, (ymax - ymin) or 1.0
         xmin, xmax, ymin, ymax = xmin - _PAD * dx, xmax + _PAD * dx, ymin - _PAD * dy, ymax + _PAD * dy
-    dw, dh = xmax - xmin, ymax - ymin
-    scale = min(box_w / dw, box_h / dh)
 
-    # Centre the data in the box and widen the limits to fill it exactly.
-    cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
-    half_w, half_h = box_w / scale / 2, box_h / scale / 2
-    limits = (cx - half_w, cx + half_w, cy - half_h, cy + half_h)
-    box = (page.margin_mm, bottom, page.margin_mm + box_w, bottom + box_h)
+    def fit(left: float):
+        box_w = page.width_mm - left - right
+        box_h = page.height_mm - top - bottom
+        if box_w <= 0 or box_h <= 0:
+            raise ValueError("page is too small for its margins and caption")
+        scale = min(box_w / (xmax - xmin), box_h / (ymax - ymin))
+        # Centre the data in the box and widen the limits to fill it exactly.
+        cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
+        half_w, half_h = box_w / scale / 2, box_h / scale / 2
+        limits = (cx - half_w, cx + half_w, cy - half_h, cy + half_h)
+        return (left, bottom, left + box_w, bottom + box_h), limits, scale
+
+    box, limits, scale = fit(left)
+    if scene.axes:
+        # The y numbers need the room their widest label takes; that depends on
+        # the ticks, which depend on the fit, so fit twice.
+        for _ in range(2):
+            widest = max(
+                letter(_format_tick(v), style.text_height_mm, style.font).width
+                for v in nice_ticks(limits[2], limits[3])
+            )
+            box, limits, scale = fit(page.margin_mm + widest + 2.5)
 
     drawing = Drawing(page, style, box, limits, scale)
+    if scene.axes or scene.grid:
+        _frame(drawing, scene)
+
     fills = 0
+    pending_labels: list[Label] = []
     for item in scene.items:
+        if isinstance(item, Label):
+            if scene.labels:
+                pending_labels.append(item)
+            continue
         if isinstance(item, Fill):
             # Seed stipple by position, not by coordinates: float noise across
             # platforms must not reshuffle the dots.
@@ -146,7 +172,97 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
             0.0,
             style.text_pen_mm,
         )
+    if pending_labels:
+        _place_labels(drawing, pending_labels)
     return drawing
+
+
+def _place_labels(d: Drawing, items: list[Label]) -> None:
+    occupancy = labels.Occupancy(d.page.width_mm, d.page.height_mm)
+    clearance = labels.CLEARANCE_MM
+    for ink in d.items:
+        if isinstance(ink, Stroke):
+            weight = labels.LIGHT if ink.role == GRID else labels.INK
+            occupancy.stamp_polyline(ink.points, ink.width_mm / 2 + clearance, weight)
+        elif isinstance(ink, Dots):
+            occupancy.stamp_points(ink.points, ink.diameter_mm / 2 + clearance)
+        elif isinstance(ink, Solid):
+            occupancy.stamp_polygon(ink.polygon, clearance)
+
+    # Higher priority first; ties keep the order they were added in.
+    for item in sorted(items, key=lambda i: -i.priority):
+        height = item.height_mm or d.style.text_height_mm
+        lettering = letter(item.text, height, d.style.font)
+        anchors = [item.at] if item.alternatives is None else [item.at, *item.alternatives]
+        anchor, box, origin, needs_leader = labels.place(
+            occupancy, [d.to_page(a) for a in anchors], lettering.width, height, item.prefer
+        )
+        pen = d.style.bold_pen_mm if item.bold else d.style.text_pen_mm
+        for stroke in lettering.strokes:
+            d.items.append(Stroke(stroke + origin, pen))
+        occupancy.stamp_box(np.add(box, (-clearance, -clearance, clearance, clearance)))
+        if needs_leader:
+            line = labels.leader(anchor, box)
+            d.items.append(Stroke(line, d.style.pen(GRID).width_mm))
+            occupancy.stamp_polyline(line, clearance)
+
+
+def nice_ticks(lo: float, hi: float, target: int = 6) -> np.ndarray:
+    """Round tick values (1, 2, 2.5 or 5 times a power of ten) inside [lo, hi]."""
+    magnitude = 10 ** np.floor(np.log10((hi - lo) / max(target, 1)))
+
+    def ticks_for(step: float) -> np.ndarray:
+        first = np.ceil(lo / step - 1e-9) * step
+        ticks = np.arange(first, hi + step * 1e-9, step)
+        decimals = max(0, int(-np.floor(np.log10(step))) + 2)
+        return np.round(np.round(ticks / step) * step, decimals)  # no 0.30000000000000004
+
+    steps = [m * magnitude for m in (1, 2, 2.5, 5, 10)]
+    # Closest to the target count; on a tie, the coarser step.
+    best = min(steps, key=lambda step: (abs(len(ticks_for(step)) - target), -step))
+    return ticks_for(best)
+
+
+def _format_tick(value: float) -> str:
+    text = f"{value:g}"
+    return "0" if text == "-0" else text
+
+
+def _frame(d: Drawing, scene: Scene) -> None:
+    """Ruled border with inward ticks and numbers (axes), and/or a light grid."""
+    style = d.style
+    x0, y0, x1, y1 = d.plot_box
+    xmin, xmax, ymin, ymax = d.data_limits
+    xt, yt = nice_ticks(xmin, xmax), nice_ticks(ymin, ymax)
+    xs = x0 + (xt - xmin) * d.scale
+    ys = y0 + (yt - ymin) * d.scale
+
+    if scene.grid:
+        grid = style.pen(GRID)
+        for x in xs:
+            d.items.append(Stroke(np.array([[x, y0], [x, y1]]), grid.width_mm, grid.dash_mm, GRID))
+        for y in ys:
+            d.items.append(Stroke(np.array([[x0, y], [x1, y]]), grid.width_mm, grid.dash_mm, GRID))
+
+    if scene.axes:
+        border = style.pen(BORDER)
+        tick_pen = style.pen(AXIS).width_mm
+        rect = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]])
+        d.items.append(Stroke(rect, border.width_mm, border.dash_mm))
+        tick = 1.5
+        for x in xs:
+            d.items.append(Stroke(np.array([[x, y0], [x, y0 + tick]]), tick_pen))
+            d.items.append(Stroke(np.array([[x, y1], [x, y1 - tick]]), tick_pen))
+        for y in ys:
+            d.items.append(Stroke(np.array([[x0, y], [x0 + tick, y]]), tick_pen))
+            d.items.append(Stroke(np.array([[x1, y], [x1 - tick, y]]), tick_pen))
+        h, pen = style.text_height_mm, style.text_pen_mm
+        for x, v in zip(xs, xt, strict=True):
+            _letter_into(d, _format_tick(v), np.array([x, y0 - 1.5]), h, "center", "top", 0.0, pen)
+        for y, v in zip(ys, yt, strict=True):
+            _letter_into(d, _format_tick(v), np.array([x0 - 1.5, y]), h, "right", "center", 0.0, pen)
+        if scene.units:
+            _letter_into(d, scene.units, np.array([x1 + 1.5, y0 - 1.5]), h, "left", "top", 0.0, pen)
 
 
 def _resolve(item, d: Drawing) -> None:
@@ -156,7 +272,7 @@ def _resolve(item, d: Drawing) -> None:
         pts = d.to_page(item.points)
         if item.closed:
             pts = np.vstack([pts, pts[:1]])
-        d.items.append(Stroke(pts, pen.width_mm, pen.dash_mm))
+        d.items.append(Stroke(pts, pen.width_mm, pen.dash_mm, item.role))
     elif isinstance(item, Fill):
         poly = d.to_page(item.polygon)
         if item.pattern == "solid":

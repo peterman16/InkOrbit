@@ -5,9 +5,32 @@ line weights, stippled night sides, drafting arrowheads and single-stroke letter
 
 ![Proof of style](docs/images/proof_of_style.png)
 
-> Early days. This is the foundation (step 1 of the plan): the drawing model, the
-> look and the matplotlib renderer. Ready-made diagrams and adapters for poliastro,
-> hapsira, Skyfield and astropy come next.
+> Early days. The drawing model, the look, the building blocks and automatic labels
+> are in place. Ready-made diagrams and adapters for poliastro, hapsira, Skyfield
+> and astropy come next.
+
+```python
+import numpy as np
+import inkorbit as ink
+from inkorbit import draw
+
+orbit = ink.Elements(a=2.6, e=0.55, nu=np.radians(110))  # Earth radii, radians
+
+scene = ink.Scene(caption="Figure 1.1-1  Elliptical orbit about the Earth")
+draw.body(scene, radius=1.0, tilt=np.radians(25))
+draw.orbit(scene, orbit)
+draw.apsides(scene, orbit, body_radius=1.0)  # perigee, apogee, line of apsides
+draw.radius_vector(scene, orbit, body_radius=1.0)
+draw.velocity_vector(scene, orbit, length=1.0)
+draw.spacecraft(scene, orbit, label="spacecraft")
+draw.true_anomaly(scene, orbit, radius=1.5)
+scene.render().savefig("orbit.png")
+```
+
+Labels are placed automatically so they avoid lines and each other (`scene.labels = False`
+hides them). Axes and a grid are off by default: `ink.Scene(axes=True, grid=True, units="km")`.
+
+![Orbits with axes](docs/images/orbits_with_axes.png)
 
 ## Install (development)
 
@@ -24,6 +47,8 @@ Scene  ──layout──▶  Drawing  ──renderer──▶  image
 data coordinates    page millimetres       matplotlib (for now)
 ```
 
+- **`draw`**: building blocks (orbit, body, apsides, nodes, angle, vectors, spacecraft)
+  that add to a scene. Orbits come from `Elements` or from arrays of 2D or 3D positions.
 - **`Scene`**: what to draw, in your data units (km, Earth radii...). Lines carry a
   *role* (`orbit`, `transfer`, `apse`, `construction`, `grid`...) instead of a colour or width.
 - **`Style`**: decides how each role looks: technical pen widths in mm, dash patterns,
