@@ -56,3 +56,13 @@ def test_unknown_role_and_page():
         ink.layout(scene)
     with pytest.raises(ValueError, match="unknown page"):
         ink.layout(_scene(), "napkin")
+
+
+def test_stipple_does_not_depend_on_float_noise():
+    square = np.array([[0.0, 0.0], [5.0, 0.0], [5.0, 5.0], [0.0, 5.0]])
+    dots = []
+    for poly in (square, square + 1e-13):
+        scene = _scene()
+        scene.fill(poly, "stipple")
+        dots.append(next(i for i in ink.layout(scene).items if isinstance(i, Dots)).points)
+    assert np.allclose(dots[0], dots[1], atol=1e-9)

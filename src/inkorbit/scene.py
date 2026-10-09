@@ -51,6 +51,7 @@ class Fill:
     pattern: Pattern = "stipple"
     spacing_mm: float | None = None
     angle_deg: float | None = None
+    seed: int | None = None  # stipple randomness; defaults to the fill's position in the scene
 
 
 @dataclass(frozen=True)
@@ -115,8 +116,8 @@ class Scene:
             self.add(Arrowhead(at, direction, arrow_size_mm))
         return line
 
-    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, angle_deg=None) -> Fill:
-        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, angle_deg))
+    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, angle_deg=None, seed=None) -> Fill:
+        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, angle_deg, seed))
 
     def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: float | None = None) -> Arrowhead:
         return self.add(Arrowhead(_xy(at), _xy(direction), size_mm))

@@ -42,9 +42,9 @@ scene.line(geo.circle((0, 0), 1.0), st.OUTLINE)
 scene.line(geo.ellipse(2.0, 0.5), st.ORBIT, arrows=(0.3, 0.8))
 scene.text("perigee", (1.0, 0), offset_mm=(1.5, -3))
 
-fig = scene.render(page="figure")      # 160 x 120 mm
-fig.savefig("transfer.png")            # 300 dpi
-fig.data_ax.plot(...)                  # keep drawing with matplotlib, in data units
+fig = scene.render(page="figure")  # 160 x 120 mm
+fig.savefig("transfer.png")  # 300 dpi
+fig.data_ax.plot(...)  # keep drawing with matplotlib, in data units
 ```
 
 In Jupyter a `Scene` (or a rendered figure) displays itself as the last line of a cell.

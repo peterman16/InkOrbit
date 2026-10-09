@@ -8,8 +8,7 @@ things, which is what keeps them small and interchangeable.
 
 from __future__ import annotations
 
-import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -127,7 +126,14 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
     box = (page.margin_mm, bottom, page.margin_mm + box_w, bottom + box_h)
 
     drawing = Drawing(page, style, box, limits, scale)
+    fills = 0
     for item in scene.items:
+        if isinstance(item, Fill):
+            # Seed stipple by position, not by coordinates: float noise across
+            # platforms must not reshuffle the dots.
+            if item.seed is None:
+                item = replace(item, seed=fills)
+            fills += 1
         _resolve(item, drawing)
     if scene.caption:
         _letter_into(
@@ -156,8 +162,7 @@ def _resolve(item, d: Drawing) -> None:
         if item.pattern == "solid":
             d.items.append(Solid(poly))
         elif item.pattern == "stipple":
-            seed = zlib.crc32(np.ascontiguousarray(item.polygon).tobytes())
-            dots = patterns.stipple(poly, item.spacing_mm or style.stipple_spacing_mm, seed=seed)
+            dots = patterns.stipple(poly, item.spacing_mm or style.stipple_spacing_mm, seed=item.seed or 0)
             if len(dots):
                 d.items.append(Dots(dots, style.stipple_dot_mm))
         elif item.pattern == "hatch":
