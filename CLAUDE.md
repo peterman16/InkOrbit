@@ -33,6 +33,10 @@ library code yourself. You:
 
 Peter only talks to you. Never ask Peter to prompt a subagent directly.
 
+**Models.** The engineers run on Sonnet and the Architect on Opus (set in each agent's
+frontmatter). If an engineer fails the same task twice, or the task is tricky orbital
+maths, rerun it with the model overridden to Opus rather than iterating on Sonnet.
+
 ## Task tracking: Jira
 
 Tasks live in Jira project **KAN** ("Team Astro") on `pantonyschmitt.atlassian.net`,
