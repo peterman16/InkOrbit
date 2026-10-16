@@ -103,19 +103,13 @@ def test_clip_polyline_and_polygon():
     assert geometry.clip_polygon(np.array([[5.0, 5.0], [6.0, 5.0], [6.0, 6.0]]), -1, 1, -1, 1) is None
 
 
-def _printed_hohmann():
-    from diagrams_gallery import hohmann_plate
-
-    plate = hohmann_plate()
-    plate.printed = ink.Printed()
-    return plate
-
-
 # Seeded, so the same pixels everywhere; the tolerance only absorbs float differences between
 # numpy/matplotlib builds, which can flip a few threshold pixels.
 @pytest.mark.mpl_image_compare(tolerance=1, savefig_kwargs={"dpi": 300})
 def test_printed_hohmann_diagram():
-    return _printed_hohmann()._printed_figure(300)
+    from diagrams_gallery import hohmann_plate
+
+    return hohmann_plate(printed=True)._printed_figure(300)
 
 
 def test_printed_plate_writes_two_colours(tmp_path):

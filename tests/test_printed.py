@@ -49,9 +49,14 @@ def test_edges_are_ragged_but_hairline_survives(page):
     out = printed.apply(rgba, DPI)
     assert (out != mask).any()
     assert out[148:154, 20:270].any(axis=0).mean() > 0.95  # the hairline is still there along its length
-    # No noise and no spread reproduces the clean render.
-    clean = printed.apply(rgba, DPI, _plain())
-    assert np.array_equal(clean, mask)
+
+
+def test_ink_spread_grows_a_stipple_dot():
+    yy, xx = np.mgrid[0:41, 0:41]
+    dot = np.hypot(xx - 20, yy - 20) <= 0.1 * DPI / 25.4  # a 0.2 mm dot, the size of a stipple dot
+    no_grain = printed.Printed(dropout_density=0, speck_density=0)
+    areas = [printed.apply(_rgba(dot), DPI, no_grain, seed=s).sum() for s in range(20)]
+    assert np.mean(areas) >= dot.sum() and min(areas) > 0
 
 
 def test_specks_on_blank_paper_match_density():
@@ -70,13 +75,7 @@ def test_dropouts_open_up_solid_ink(page):
     assert 0 < (mask & ~out).sum() < 0.2 * mask.sum() and not (out & ~mask).any()
 
 
-def test_zero_densities_leave_no_grain(page):
-    rgba, mask = page
-    off = _plain()
-    assert np.array_equal(printed.apply(rgba, DPI, off), mask)
-
-
-def test_no_skew_no_warp_leaves_image_unchanged(page):
+def test_all_effects_off_reproduce_the_clean_render(page):
     rgba, mask = page
     assert np.array_equal(printed.apply(rgba, DPI, _plain()), mask)
 

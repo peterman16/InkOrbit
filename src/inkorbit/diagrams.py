@@ -21,6 +21,7 @@ from .adapters import is_orbit_like as _orbit_like
 from .bodies import Body
 from .elements import Elements
 from .plate import Plate
+from .printed import Printed
 from .scene import point_along
 
 
@@ -48,6 +49,7 @@ def orbit(
     page="figure",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """One orbit in its own plane, periapsis to the right, with its elements labelled.
 
@@ -60,7 +62,7 @@ def orbit(
     el = as_elements(orbit)
     central = resolve_body(body, [orbit])
     radius = body_radius if body_radius is not None else central.radius_km
-    plate = Plate(caption, page=page, style=style, labels=labels)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
 
     draw.body(s, radius, coastlines=coastlines)
@@ -110,6 +112,7 @@ def orbits(
     labels: bool = True,
     axes: bool = False,
     grid: bool = False,
+    printed: bool | Printed = False,
 ) -> Plate:
     """Several orbits about one body, drawn in their common plane.
 
@@ -122,7 +125,16 @@ def orbits(
         raise ValueError("pass at least one orbit")
     central = resolve_body(body, orbits)
     radius = body_radius if body_radius is not None else central.radius_km
-    plate = Plate(caption, page=page, style=style, labels=labels, axes=axes, grid=grid, units="km" if axes else None)
+    plate = Plate(
+        caption,
+        page=page,
+        style=style,
+        labels=labels,
+        printed=printed,
+        axes=axes,
+        grid=grid,
+        units="km" if axes else None,
+    )
     s = plate.scene
     draw.body(s, radius, coastlines=coastlines)
     names = list(names or [])
@@ -150,6 +162,7 @@ def hohmann(
     page="figure",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """A Hohmann transfer between two circular coplanar orbits.
 
@@ -171,7 +184,7 @@ def hohmann(
         # Start at apoapsis on the right and descend to periapsis on the left.
         half = geometry.rotate(transfer.points(nu_range=(np.pi, 2 * np.pi), n=361), np.pi)
 
-    plate = Plate(caption, page=page, style=style, labels=labels)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
     draw.body(s, radius)
     draw.orbit(s, Elements(a=r1), role=st.SECONDARY, frame="plane", label=names[0], label_at=0.62)
@@ -231,6 +244,7 @@ def ground_track(
     page="map",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """A ground track on a ruled equirectangular map with coastlines.
 
@@ -242,7 +256,7 @@ def ground_track(
     the track. ``land="stipple"`` stipples the continents.
     """
     lat, lon = as_lat_lon(track, lon)
-    plate = Plate(caption, page=page, style=style, labels=labels, axes=True, grid=True)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed, axes=True, grid=True)
     s = plate.scene
     lim = float(latitude_limit)
     box = (-180.0, 180.0, -lim, lim)

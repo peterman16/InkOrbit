@@ -33,8 +33,10 @@ def orbits_plate() -> ink.Plate:
     )
 
 
-def hohmann_plate() -> ink.Plate:
-    return ink.diagram("hohmann", 6_678, 42_164, caption="Figure 4.1-1  Hohmann transfer to geosynchronous orbit")
+def hohmann_plate(**kwargs) -> ink.Plate:
+    return ink.diagram(
+        "hohmann", 6_678, 42_164, caption="Figure 4.1-1  Hohmann transfer to geosynchronous orbit", **kwargs
+    )
 
 
 def circular_ground_track(inclination_deg=31.0, period_min=88.0, revolutions=3.0, lon0=-80.0):

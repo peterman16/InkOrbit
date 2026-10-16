@@ -24,11 +24,14 @@ class Printed:
     ink_spread_mm: float = 0.035  # blur of the ink into the paper (Gaussian sigma)
     edge_noise: float = 0.12  # amplitude of the rough-edge noise, as a fraction of full ink
     edge_grain_mm: float = 0.06  # correlation length of that noise (size of the bumps)
-    # Grain. Densities are expected counts per mm² of page, sizes are the side of the square blob.
+    # Real ink spreads outwards: lowering the threshold from half-tone grows every mark by a fraction
+    # of the spread, so small dots and hairlines keep at least their drawn size instead of eroding.
+    ink_gain: float = 0.1
     # Scan geometry: the sheet lies slightly crooked and the plate is slightly out of true.
     skew_deg: float = 0.12  # rotation of the whole page about its centre
     warp_mm: float = 0.25  # amplitude of the smooth displacement
     warp_wavelength_mm: float = 90.0
+    # Grain. Densities are expected counts per mm² of page, sizes are the side of the square blob.
     dropout_density: float = 0.15  # pinholes where ink failed to take
     dropout_mm: float = 0.07
     speck_density: float = 0.006  # stray ink on bare paper
@@ -46,10 +49,12 @@ def apply(rgba: np.ndarray, dpi: float, params: Printed = DEFAULT_PRINTED, seed:
     coverage = 1.0 - rgba[..., :3].mean(axis=2, dtype=np.float32) / 255.0
     coverage = _scan(coverage, px_per_mm, params, rng)
     coverage = _smooth(coverage, _gaussian(params.ink_spread_mm * px_per_mm))
-    coverage += params.edge_noise * _noise(coverage.shape, params.edge_grain_mm * px_per_mm, rng)
+    # Roughen only near ink: on bare paper the lowered threshold would turn noise peaks into stray specks.
+    near_ink = coverage > 0.01
+    coverage += params.edge_noise * _noise(coverage.shape, params.edge_grain_mm * px_per_mm, rng) * near_ink
     coverage += _blobs(coverage.shape, params.speck_density, params.speck_mm, px_per_mm, rng)
     coverage -= _blobs(coverage.shape, params.dropout_density, params.dropout_mm, px_per_mm, rng)
-    return coverage > 0.5
+    return coverage > 0.5 - params.ink_gain
 
 
 def _gaussian(sigma_px: float) -> np.ndarray:
