@@ -81,3 +81,7 @@ if __name__ == "__main__":
         out = OUT / f"{name}.png"
         make().savefig(out, dpi=200)
         print(f"wrote {out}")
+    # Printed mode needs 300 dpi, or its thinnest pens are a pixel wide and the grain eats them.
+    out = OUT / "hohmann_diagram_printed.png"
+    hohmann_plate(printed=True).savefig(out, dpi=300)
+    print(f"wrote {out}")
