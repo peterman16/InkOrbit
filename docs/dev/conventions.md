@@ -25,7 +25,7 @@
 
 ## Git and PRs
 
-- Branch per task: `<area>/<short-name>` (e.g. `render/hatch-angle`).
+- Branch per task: `<area>/<JIRA-KEY>-<short-name>` (e.g. `render/KAN-12-hatch-angle`).
 - Commit messages: imperative summary line under ~70 chars, then a short why.
-- PR body: what changed, `Closes #<task>`, and a rendered image when the look changes.
+- PR title starts with the Jira key; body: what changed, and a rendered image when the look changes.
 - Keep PRs small. A PR that touches more than one area should say why.

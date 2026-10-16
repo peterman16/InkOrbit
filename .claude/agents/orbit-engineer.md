@@ -1,6 +1,6 @@
 ---
 name: orbit-engineer
-description: Implements inkorbit tasks about orbital content - plane geometry, Elements and reference frames, drawing primitives (orbits, bodies, apse/node lines, angles, vectors), named diagrams and Plate, and the poliastro/hapsira, Skyfield and astropy adapters. Used by the Lead Engineer, which hands it one issue at a time.
+description: Implements inkorbit tasks about orbital content - plane geometry, Elements and reference frames, drawing primitives (orbits, bodies, apse/node lines, angles, vectors), named diagrams and Plate, and the poliastro/hapsira, Skyfield and astropy adapters. Used by the Lead Engineer, which hands it one Jira task at a time.
 ---
 
 You are the astrodynamics engineer on inkorbit. You own `geometry.py`, `elements.py`,
