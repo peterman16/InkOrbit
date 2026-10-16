@@ -24,6 +24,11 @@ class Printed:
     ink_spread_mm: float = 0.04  # blur of the ink into the paper (Gaussian sigma)
     edge_noise: float = 0.2  # amplitude of the rough-edge noise, as a fraction of full ink
     edge_grain_mm: float = 0.06  # correlation length of that noise (size of the bumps)
+    # Grain. Densities are expected counts per mm² of page, sizes are the side of the square blob.
+    dropout_density: float = 0.3  # pinholes where ink failed to take
+    dropout_mm: float = 0.07
+    speck_density: float = 0.02  # stray ink on bare paper
+    speck_mm: float = 0.09
 
 
 DEFAULT_PRINTED = Printed()
@@ -37,6 +42,8 @@ def apply(rgba: np.ndarray, dpi: float, params: Printed = DEFAULT_PRINTED, seed:
     coverage = 1.0 - rgba[..., :3].mean(axis=2, dtype=np.float32) / 255.0
     coverage = _smooth(coverage, _gaussian(params.ink_spread_mm * px_per_mm))
     coverage += params.edge_noise * _noise(coverage.shape, params.edge_grain_mm * px_per_mm, rng)
+    coverage += _blobs(coverage.shape, params.speck_density, params.speck_mm, px_per_mm, rng)
+    coverage -= _blobs(coverage.shape, params.dropout_density, params.dropout_mm, px_per_mm, rng)
     return coverage > 0.5
 
 
@@ -65,3 +72,11 @@ def _noise(shape: tuple[int, ...], corr_px: float, rng: np.random.Generator) -> 
     noise = _smooth(rng.standard_normal(shape, dtype=np.float32), kernel)
     # Smoothing shrinks the variance by sum(k^2) per axis; undo it so edge_noise means what it says.
     return noise / np.sum(kernel**2)
+
+
+def _blobs(shape: tuple[int, ...], density_per_mm2: float, size_mm: float, px_per_mm: float, rng) -> np.ndarray:
+    """A 0/1 field with square blobs of ``size_mm`` scattered at ``density_per_mm2``."""
+    seeds = rng.random(shape, dtype=np.float32) < density_per_mm2 / px_per_mm**2
+    side = max(1, round(size_mm * px_per_mm))
+    # Spread each seed over a side x side square (the box is centred, so shifted by half a pixel at most).
+    return (_smooth(seeds.astype(np.float32), np.ones(side, np.float32)) > 0).astype(np.float32)
