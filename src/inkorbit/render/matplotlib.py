@@ -126,3 +126,12 @@ def _dots(dots: Dots, ink: str, ax: Axes) -> PathCollection:
     )
     coll.set_transform(IdentityTransform())
     return coll
+
+
+def bitmap_figure(pixels: np.ndarray, dpi: int, paper: str) -> Figure:
+    """A figure holding exactly ``pixels`` (an ``(h, w, 3)`` uint8 array), unresampled when saved at ``dpi``.
+    Raster formats get the bitmap as is; vector formats embed it as an image."""
+    h, w = pixels.shape[:2]
+    fig = Figure(figsize=(w / dpi, h / dpi), facecolor=paper)
+    fig.figimage(pixels)
+    return fig

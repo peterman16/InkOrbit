@@ -21,17 +21,17 @@ class Printed:
     """How worn the print looks. Sizes are millimetres on the page, so the result
     does not depend on the dpi it is rasterised at."""
 
-    ink_spread_mm: float = 0.04  # blur of the ink into the paper (Gaussian sigma)
-    edge_noise: float = 0.2  # amplitude of the rough-edge noise, as a fraction of full ink
+    ink_spread_mm: float = 0.035  # blur of the ink into the paper (Gaussian sigma)
+    edge_noise: float = 0.12  # amplitude of the rough-edge noise, as a fraction of full ink
     edge_grain_mm: float = 0.06  # correlation length of that noise (size of the bumps)
     # Grain. Densities are expected counts per mm² of page, sizes are the side of the square blob.
     # Scan geometry: the sheet lies slightly crooked and the plate is slightly out of true.
     skew_deg: float = 0.12  # rotation of the whole page about its centre
     warp_mm: float = 0.25  # amplitude of the smooth displacement
     warp_wavelength_mm: float = 90.0
-    dropout_density: float = 0.3  # pinholes where ink failed to take
+    dropout_density: float = 0.15  # pinholes where ink failed to take
     dropout_mm: float = 0.07
-    speck_density: float = 0.02  # stray ink on bare paper
+    speck_density: float = 0.006  # stray ink on bare paper
     speck_mm: float = 0.09
 
 
