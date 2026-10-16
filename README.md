@@ -5,6 +5,8 @@ line weights, stippled night sides, drafting arrowheads and single-stroke letter
 
 ![Proof of style](docs/images/proof_of_style.png)
 
+For a short tour with every figure rendered, open [examples/tour.ipynb](examples/tour.ipynb).
+
 ## Ready-made diagrams
 
 Each diagram is one call, by name or as a function, and returns a `Plate` you can keep
