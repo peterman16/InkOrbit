@@ -33,8 +33,9 @@ _LEADER_FROM_GAP_MM = 5.0
 
 # How much a label minds sitting on each kind of ink.
 LIGHT = 1  # grid lines: labels may sit on them, as on a printed map
-INK = 10  # lines, symbols, fills
-TEXT = 50  # other labels: never overlap
+INK = 40  # lines, symbols, fills
+TEXT = 200  # other labels: never overlap
+_COST_SCALE = 0.1  # occupied-cell weight -> score points
 
 
 class Occupancy:
@@ -138,10 +139,10 @@ def place(occupancy: Occupancy, anchors, width: float, height: float, prefer: st
     best = None
     for k, anchor in enumerate(anchors):
         for rank, gap, box, origin in candidates(anchor, width, height, prefer):
-            score = occupancy.cost(box) + rank + 4.0 * _GAPS_MM.index(gap) + 3.0 * k
+            score = _COST_SCALE * occupancy.cost(box) + rank + 4.0 * _GAPS_MM.index(gap) + 3.0 * k
             if gap >= _LEADER_FROM_GAP_MM and np.isfinite(score):
                 # The leader must not cut through other labels either.
-                score += occupancy.line_cost(leader(anchor, box))
+                score += _COST_SCALE * occupancy.line_cost(leader(anchor, box))
             if best is None or score < best[0]:
                 best = (score, anchor, box, origin, gap)
     _, anchor, box, origin, gap = best

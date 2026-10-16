@@ -151,3 +151,72 @@ def night_side(sun_view: np.ndarray, n: int = 181) -> np.ndarray | None:
     a = a_start + direction * np.linspace(0.0, np.pi, n)
     limb = np.column_stack([np.cos(a), np.sin(a)])
     return np.vstack([terminator[:, :2], limb[1:-1]])
+
+
+# --- Clipping to a rectangle -------------------------------------------------------
+
+
+def clip_polyline(points: np.ndarray, xmin: float, xmax: float, ymin: float, ymax: float) -> list[np.ndarray]:
+    """Clip a polyline to a rectangle, returning the runs that lie inside it."""
+    pts = np.asarray(points, dtype=float)
+    runs: list[list[np.ndarray]] = []
+    current: list[np.ndarray] = []
+    for p0, p1 in zip(pts[:-1], pts[1:], strict=True):
+        clipped = _clip_segment(p0, p1, xmin, xmax, ymin, ymax)
+        if clipped is None:
+            if current:
+                runs.append(current)
+                current = []
+            continue
+        a, b = clipped
+        if current and not np.allclose(current[-1], a):
+            runs.append(current)
+            current = []
+        if not current:
+            current.append(a)
+        current.append(b)
+        if not np.allclose(b, p1):  # left the rectangle
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    return [np.array(r) for r in runs if len(r) >= 2]
+
+
+def _clip_segment(p0, p1, xmin, xmax, ymin, ymax):
+    """Liang-Barsky segment clipping; None if the segment is entirely outside."""
+    d = p1 - p0
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-d[0], p0[0] - xmin), (d[0], xmax - p0[0]), (-d[1], p0[1] - ymin), (d[1], ymax - p0[1])):
+        if p == 0:
+            if q < 0:
+                return None
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return None
+    return p0 + t0 * d, p0 + t1 * d
+
+
+def clip_polygon(polygon: np.ndarray, xmin: float, xmax: float, ymin: float, ymax: float) -> np.ndarray | None:
+    """Sutherland-Hodgman clipping of a polygon to a rectangle; None if nothing is left."""
+    out = np.asarray(polygon, dtype=float)
+    for axis, bound, keep_below in ((0, xmin, False), (0, xmax, True), (1, ymin, False), (1, ymax, True)):
+        if len(out) == 0:
+            return None
+        inside = out[:, axis] <= bound if keep_below else out[:, axis] >= bound
+        result = []
+        for k in range(len(out)):
+            cur, prev = out[k], out[k - 1]
+            cur_in, prev_in = inside[k], inside[k - 1]
+            if cur_in != prev_in:
+                t = (bound - prev[axis]) / (cur[axis] - prev[axis])
+                result.append(prev + t * (cur - prev))
+            if cur_in:
+                result.append(cur)
+        out = np.array(result)
+    return out if len(out) >= 3 else None

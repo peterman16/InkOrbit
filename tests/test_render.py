@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from diagrams_gallery import PLATES
 from orbits_with_axes import orbits_scene
 from proof_of_style import proof_scene
 
@@ -14,6 +15,12 @@ def test_proof_of_style():
 @pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
 def test_orbits_with_axes():
     return orbits_scene().render().figure
+
+
+@pytest.mark.parametrize("name", sorted(PLATES))
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_diagram(name):
+    return PLATES[name]().render().figure
 
 
 def test_data_axes_match_scene_coordinates():
