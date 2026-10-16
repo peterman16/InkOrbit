@@ -9,6 +9,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection, PathCollection
 from matplotlib.figure import Figure
+from matplotlib.image import imread
 from matplotlib.markers import MarkerStyle
 from matplotlib.patches import Polygon
 from matplotlib.transforms import IdentityTransform
@@ -36,6 +37,11 @@ class RenderedFigure:
         buf = io.BytesIO()
         self.savefig(buf, dpi=dpi, format="png")
         return buf.getvalue()
+
+    def to_array(self, dpi: int = 150) -> np.ndarray:
+        """The page as an ``(h, w, 4)`` uint8 RGBA array."""
+        rgba = imread(io.BytesIO(self.to_png(dpi)), format="png")
+        return np.rint(rgba * 255).astype(np.uint8)
 
     def _repr_png_(self) -> bytes:
         return self.to_png()
