@@ -45,3 +45,17 @@ def test_png_repr():
 def test_unknown_renderer():
     with pytest.raises(ValueError, match="unknown renderer"):
         ink.Scene().render(renderer="plotter")
+
+
+def test_to_array_matches_page_and_inks_strokes():
+    scene = ink.Scene()
+    scene.line([[0, 0], [10, 0]], role="orbit")
+    fig = scene.render()
+    arr = fig.to_array(dpi=100)
+    page = fig.drawing.page
+    assert arr.dtype == np.uint8 and arr.shape[2] == 4
+    assert abs(arr.shape[1] - page.width_mm / 25.4 * 100) <= 1
+    assert abs(arr.shape[0] - page.height_mm / 25.4 * 100) <= 1
+    assert tuple(arr[0, 0]) == (255, 255, 255, 255)  # blank corner is paper
+    x, y = (fig.drawing.to_page(np.array([5.0, 0.0])) / 25.4 * 100).astype(int)
+    assert arr[arr.shape[0] - 1 - y, x, 0] < 40  # on the stroke

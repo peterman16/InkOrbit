@@ -5,6 +5,8 @@ line weights, stippled night sides, drafting arrowheads and single-stroke letter
 
 ![Proof of style](docs/images/proof_of_style.png)
 
+For a short tour with every figure rendered, open [examples/tour.ipynb](examples/tour.ipynb).
+
 ## Ready-made diagrams
 
 Each diagram is one call, by name or as a function, and returns a `Plate` you can keep
@@ -37,6 +39,21 @@ imports poliastro, hapsira or astropy itself, so install whichever you use:
 - astropy `Quantity` lengths and angles anywhere a number goes,
 - a Skyfield position over several times as a ground track (`ink.diagram("ground_track", sat.at(t))`)
   or as an orbit's sampled positions.
+
+## Printed mode
+
+`printed=True` turns the finished image into a two-colour bitmap that looks scanned from
+an old report: ink spread, rough edges, grain and a slight skew. It is seeded, so the same
+figure always prints the same way, and SVG or PDF output embeds the bitmap. Pass an
+`ink.Printed(...)` instead of `True` to tune the wear. Keep the default 300 dpi or more, or the thinnest pens break up.
+
+```python
+ink.diagram("hohmann", 6_678, 42_164, printed=True).savefig("hohmann.png")
+```
+
+| clean | printed |
+|---|---|
+| ![Hohmann, clean](docs/images/hohmann_diagram.png) | ![Hohmann, printed](docs/images/hohmann_diagram_printed.png) |
 
 ## Building blocks
 

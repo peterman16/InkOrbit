@@ -1,9 +1,12 @@
+import itertools
+
 import numpy as np
 import pytest
 
 import inkorbit as ink
 from inkorbit import geometry, maps
-from inkorbit.scene import Label, Line
+from inkorbit import style as st
+from inkorbit.scene import Arrowhead, Label, Line
 
 
 def _labels(plate):
@@ -39,6 +42,18 @@ def test_hohmann_delta_v_matches_textbook_leo_to_geo():
     notes = dict(n.split(" = ") for n in plate.scene.notes)
     assert notes["total Δv"] == "3.893 km/s"  # LEO (300 km) to GEO is the classic ~3.9 km/s
     assert notes["time of flight"] == "5.28 h"
+
+
+def test_hohmann_initial_orbit_hugging_the_body_has_no_arrows():
+    items = ink.diagram("hohmann", 6678, 42_164).scene.items
+    # Arrowheads follow the line they belong to.
+    initial, final, transfer = (
+        sum(1 for _ in itertools.takewhile(lambda i: isinstance(i, Arrowhead), items[k + 1 :]))
+        for k, item in enumerate(items)
+        if isinstance(item, Line) and item.role in (st.SECONDARY, st.TRANSFER)
+    )
+    assert initial == 0  # 300 km up: within 10% of the Earth's radius
+    assert final > 0 and transfer > 0
 
 
 def test_hohmann_downward_and_errors():
@@ -101,3 +116,26 @@ def test_clip_polyline_and_polygon():
     poly = geometry.clip_polygon(np.array([[-2.0, -2.0], [2.0, -2.0], [2.0, 2.0], [-2.0, 2.0]]), -1, 1, -1, 1)
     assert np.allclose(sorted(map(tuple, poly)), [(-1, -1), (-1, 1), (1, -1), (1, 1)])
     assert geometry.clip_polygon(np.array([[5.0, 5.0], [6.0, 5.0], [6.0, 6.0]]), -1, 1, -1, 1) is None
+
+
+# Seeded, so the same pixels everywhere; the tolerance only absorbs float differences between
+# numpy/matplotlib builds, which can flip a few threshold pixels.
+@pytest.mark.mpl_image_compare(tolerance=1, savefig_kwargs={"dpi": 300})
+def test_printed_hohmann_diagram():
+    from diagrams_gallery import hohmann_plate
+
+    return hohmann_plate(printed=True)._printed_figure(300)
+
+
+def test_printed_plate_writes_two_colours(tmp_path):
+    from matplotlib.image import imread
+
+    plate = ink.Plate("x", printed=True)
+    plate.scene.line([[0, 0], [10, 5]])
+    for ext in ("png", "svg", "pdf"):
+        plate.savefig(tmp_path / f"p.{ext}", dpi=150)
+    px = imread(tmp_path / "p.png")
+    assert len(np.unique(px.reshape(-1, px.shape[2]), axis=0)) == 2
+    clean = ink.Plate("x")
+    assert plate.printed is not None and clean.printed is None and ink.Plate(printed=ink.Printed()).printed
+    assert plate._repr_png_()[:4] == b"\x89PNG"

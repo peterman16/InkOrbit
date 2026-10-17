@@ -7,6 +7,7 @@ from .elements import Elements
 from .layout import PAGES, Page, layout
 from .lettering import letter
 from .plate import Plate
+from .printed import Printed
 from .render import render
 from .scene import Scene
 from .style import DEFAULT_STYLE, Pen, Style
@@ -19,6 +20,7 @@ __all__ = [
     "Page",
     "Pen",
     "Plate",
+    "Printed",
     "Scene",
     "Style",
     "diagram",

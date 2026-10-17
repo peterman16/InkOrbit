@@ -79,11 +79,27 @@ def view_rotation(tilt: float = 0.0, spin: float = 0.0) -> np.ndarray:
     """
     # Body frame: x through (lat 0, lon 0), y through (0, 90E), z north.
     to_view = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
-    cs, ss = np.cos(spin), np.sin(spin)
-    spin_m = np.array([[cs, ss, 0.0], [-ss, cs, 0.0], [0.0, 0.0, 1.0]])
     ct, st = np.cos(tilt), np.sin(tilt)
     tilt_m = np.array([[1.0, 0.0, 0.0], [0.0, ct, -st], [0.0, st, ct]])
-    return tilt_m @ to_view @ spin_m
+    return tilt_m @ to_view @ _r3(spin)
+
+
+def orbit_view_rotation(i: float, raan: float, argp: float, in_plane: float = 0.0) -> np.ndarray:
+    """Body -> view rotation for a drawing that looks down the orbit normal.
+
+    The body frame is inertial (longitude 0 at the vernal equinox), so the view
+    is the perifocal frame R3(argp) R1(i) R3(raan), turned in the drawing by
+    ``in_plane`` (e.g. raan + argp for the "plane" frame). Radians.
+    """
+    ci, si = np.cos(i), np.sin(i)
+    r1 = np.array([[1.0, 0.0, 0.0], [0.0, ci, si], [0.0, -si, ci]])
+    return _r3(argp - in_plane) @ r1 @ _r3(raan)
+
+
+def _r3(angle: float) -> np.ndarray:
+    """Frame rotation by ``angle`` about z (coordinates of the same vector in the turned frame)."""
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
 def lat_lon_to_view(lat: np.ndarray, lon: np.ndarray, rotation: np.ndarray) -> np.ndarray:
