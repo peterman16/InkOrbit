@@ -32,6 +32,7 @@ PAGES: dict[str, Page] = {
     "wide": Page(180, 100),
     "column": Page(85, 70, 4.0),
     "square": Page(120, 120),
+    "map": Page(200, 130),
     "a4": Page(210, 297, 20.0),
     "letter": Page(215.9, 279.4, 20.0),
 }
@@ -109,11 +110,17 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
     bottom = page.margin_mm
     if scene.caption:
         bottom += style.caption_height_mm + style.caption_gap_mm
+    notes_layout = None
+    if scene.notes:
+        notes_layout = _notes_columns(scene.notes, style, page.width_mm - 2 * page.margin_mm)
+        bottom += notes_layout[2] + _NOTES_GAP_MM
     if scene.axes:
         # Room for the tick numbers below the border and the units beside them.
         bottom += style.text_height_mm + 3.0
         if scene.units:
             right += letter(scene.units, style.text_height_mm, style.font).width + 2.0
+        if scene.numbers_all_sides:
+            top += style.text_height_mm + 3.0
 
     xmin, xmax, ymin, ymax = scene.bounds()
     if scene.limits is None:
@@ -126,6 +133,12 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
         if box_w <= 0 or box_h <= 0:
             raise ValueError("page is too small for its margins and caption")
         scale = min(box_w / (xmax - xmin), box_h / (ymax - ymin))
+        if scene.limits is not None:
+            # Explicit limits are kept exactly: shrink the box to their shape,
+            # centred across the page and sitting on the space reserved below.
+            w, h = (xmax - xmin) * scale, (ymax - ymin) * scale
+            x0 = left + (box_w - w) / 2
+            return (x0, bottom, x0 + w, bottom + h), (xmin, xmax, ymin, ymax), scale
         # Centre the data in the box and widen the limits to fill it exactly.
         cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
         half_w, half_h = box_w / scale / 2, box_h / scale / 2
@@ -172,9 +185,38 @@ def layout(scene: Scene, page: str | Page | tuple[float, float] = "figure", styl
             0.0,
             style.text_pen_mm,
         )
+    if notes_layout is not None:
+        _draw_notes(drawing, scene, notes_layout)
     if pending_labels:
         _place_labels(drawing, pending_labels)
     return drawing
+
+
+_NOTES_GAP_MM = 4.0
+_NOTES_LINE = 1.7  # line spacing as a multiple of the text height
+_NOTES_COLUMN_GAP_MM = 6.0
+
+
+def _notes_columns(notes: list[str], style: Style, width: float):
+    """(columns, rows, height) for setting the notes in equal columns across ``width``."""
+    h = style.text_height_mm
+    widest = max(letter(n, h, style.font).width for n in notes) + _NOTES_COLUMN_GAP_MM
+    columns = max(1, min(len(notes), int(width // widest)))
+    rows = int(np.ceil(len(notes) / columns))
+    return columns, rows, rows * _NOTES_LINE * h
+
+
+def _draw_notes(d: Drawing, scene: Scene, notes_layout) -> None:
+    """Legend lines in columns, filled top to bottom then left to right, under the figure."""
+    columns, rows, height = notes_layout
+    style, h = d.style, d.style.text_height_mm
+    x0, y0, x1, _ = d.plot_box
+    top = y0 - _NOTES_GAP_MM - (style.text_height_mm + 3.0 if scene.axes else 0.0)
+    column_w = (x1 - x0) / columns
+    for k, note in enumerate(scene.notes):
+        col, row = divmod(k, rows)
+        baseline = np.array([x0 + col * column_w, top - h - row * _NOTES_LINE * h])
+        _letter_into(d, note, baseline, h, "left", "baseline", 0.0, style.text_pen_mm)
 
 
 def _place_labels(d: Drawing, items: list[Label]) -> None:
@@ -182,8 +224,10 @@ def _place_labels(d: Drawing, items: list[Label]) -> None:
     clearance = labels.CLEARANCE_MM
     for ink in d.items:
         if isinstance(ink, Stroke):
-            weight = labels.LIGHT if ink.role == GRID else labels.INK
-            occupancy.stamp_polyline(ink.points, ink.width_mm / 2 + clearance, weight)
+            if ink.role == GRID:
+                occupancy.stamp_polyline(ink.points, ink.width_mm / 2, labels.LIGHT)
+            else:
+                occupancy.stamp_polyline(ink.points, ink.width_mm / 2 + clearance)
         elif isinstance(ink, Dots):
             occupancy.stamp_points(ink.points, ink.diameter_mm / 2 + clearance)
         elif isinstance(ink, Solid):
@@ -223,6 +267,13 @@ def nice_ticks(lo: float, hi: float, target: int = 6) -> np.ndarray:
     return ticks_for(best)
 
 
+def _ticks(explicit, lo: float, hi: float) -> np.ndarray:
+    if explicit is None:
+        return nice_ticks(lo, hi)
+    ticks = np.asarray(explicit, dtype=float)
+    return ticks[(ticks >= lo - 1e-9) & (ticks <= hi + 1e-9)]
+
+
 def _format_tick(value: float) -> str:
     text = f"{value:g}"
     return "0" if text == "-0" else text
@@ -233,7 +284,8 @@ def _frame(d: Drawing, scene: Scene) -> None:
     style = d.style
     x0, y0, x1, y1 = d.plot_box
     xmin, xmax, ymin, ymax = d.data_limits
-    xt, yt = nice_ticks(xmin, xmax), nice_ticks(ymin, ymax)
+    xt, yt = _ticks(scene.xticks, xmin, xmax), _ticks(scene.yticks, ymin, ymax)
+    fmt = scene.tick_format or _format_tick
     xs = x0 + (xt - xmin) * d.scale
     ys = y0 + (yt - ymin) * d.scale
 
@@ -258,9 +310,13 @@ def _frame(d: Drawing, scene: Scene) -> None:
             d.items.append(Stroke(np.array([[x1, y], [x1 - tick, y]]), tick_pen))
         h, pen = style.text_height_mm, style.text_pen_mm
         for x, v in zip(xs, xt, strict=True):
-            _letter_into(d, _format_tick(v), np.array([x, y0 - 1.5]), h, "center", "top", 0.0, pen)
+            _letter_into(d, fmt(v), np.array([x, y0 - 1.5]), h, "center", "top", 0.0, pen)
+            if scene.numbers_all_sides:
+                _letter_into(d, fmt(v), np.array([x, y1 + 1.5]), h, "center", "bottom", 0.0, pen)
         for y, v in zip(ys, yt, strict=True):
-            _letter_into(d, _format_tick(v), np.array([x0 - 1.5, y]), h, "right", "center", 0.0, pen)
+            _letter_into(d, fmt(v), np.array([x0 - 1.5, y]), h, "right", "center", 0.0, pen)
+            if scene.numbers_all_sides:
+                _letter_into(d, fmt(v), np.array([x1 + 1.5, y]), h, "left", "center", 0.0, pen)
         if scene.units:
             _letter_into(d, scene.units, np.array([x1 + 1.5, y0 - 1.5]), h, "left", "top", 0.0, pen)
 

@@ -8,7 +8,7 @@ and is resolved by :mod:`inkorbit.layout` when the figure is put on a page.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -110,7 +110,12 @@ class Scene:
     labels: bool = True  # draw automatic labels
     axes: bool = False  # ruled border with ticks and numbers
     grid: bool = False  # light grid at the tick positions
-    units: str | None = None  # appended to the axis numbers, e.g. "km"
+    units: str | None = None  # written after the x-axis numbers, e.g. "km"
+    xticks: Sequence[float] | None = None  # explicit tick positions (data units)
+    yticks: Sequence[float] | None = None
+    tick_format: Callable[[float], str] | None = None
+    numbers_all_sides: bool = False  # tick numbers on all four sides, as on a map
+    notes: list[str] = field(default_factory=list)  # legend lines set in columns under the figure
 
     def add(self, item: Item) -> Item:
         self.items.append(item)

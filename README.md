@@ -5,9 +5,40 @@ line weights, stippled night sides, drafting arrowheads and single-stroke letter
 
 ![Proof of style](docs/images/proof_of_style.png)
 
-> Early days. The drawing model, the look, the building blocks and automatic labels
-> are in place. Ready-made diagrams and adapters for poliastro, hapsira, Skyfield
-> and astropy come next.
+## Ready-made diagrams
+
+Each diagram is one call, by name or as a function, and returns a `Plate` you can keep
+drawing on, save, or show in a notebook:
+
+```python
+import numpy as np
+import inkorbit as ink
+
+gto = ink.Elements(a=24_400, e=0.72, i=np.radians(28.5), argp=np.radians(35), nu=np.radians(125))
+ink.diagram("orbit", gto, caption="Figure 3.2-1  Geosynchronous transfer orbit").savefig("gto.png")
+ink.diagram("orbits", leo, molniya, gto, names=["low Earth orbit", "Molniya", "transfer orbit"])
+ink.diagram("hohmann", 6_678, 42_164)  # radii in km
+ink.diagram("ground_track", lat, lon, stations=[("Cape Canaveral", 28.4, -80.6, 15)])
+```
+
+| `"orbit"` | `"hohmann"` |
+|---|---|
+| ![Orbit](docs/images/orbit_diagram.png) | ![Hohmann](docs/images/hohmann_diagram.png) |
+| **`"orbits"`** | **`"ground_track"`** |
+| ![Orbits](docs/images/orbits_diagram.png) | ![Ground track](docs/images/ground_track_diagram.png) |
+
+### Works with poliastro, hapsira, Skyfield and astropy
+
+Pass their objects straight in. inkorbit reads them by their attributes and never
+imports poliastro, hapsira or astropy itself, so install whichever you use:
+
+- a poliastro or hapsira `Orbit` wherever an orbit goes (its attractor sets the body,
+  its size and what the apsides are called: perigee, perilune, perihelion...),
+- astropy `Quantity` lengths and angles anywhere a number goes,
+- a Skyfield position over several times as a ground track (`ink.diagram("ground_track", sat.at(t))`)
+  or as an orbit's sampled positions.
+
+## Building blocks
 
 ```python
 import numpy as np
@@ -76,6 +107,7 @@ In Jupyter a `Scene` (or a rendered figure) displays itself as the last line of 
 
 ## Credits
 
+Map data: made with [Natural Earth](https://www.naturalearthdata.com/) (public domain).
 Lettering uses the Hershey vector fonts, created by Dr. A. V. Hershey at the U.S.
 Naval Weapons Laboratory, via the MIT-licensed
 [Hershey-Fonts](https://github.com/apshu/HersheyFonts) package.

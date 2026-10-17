@@ -31,3 +31,17 @@ jobs:
         with:
           name: result-images-${{ matrix.python-version }}
           path: result_images
+
+  adapters:
+    # poliastro needs Python < 3.11 and hapsira needs matplotlib < 3.8, so the
+    # real-library adapter tests run in their own environment, outside the lock.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.10"
+      - run: uv venv .venv-adapters
+      - run: uv pip install --python .venv-adapters -e . pytest pytest-mpl hapsira poliastro skyfield astropy "numpy<2"
+      - run: .venv-adapters/bin/python -c "import hapsira, poliastro, skyfield, astropy"
+      - run: .venv-adapters/bin/python -m pytest tests/test_adapters.py tests/test_diagrams.py
