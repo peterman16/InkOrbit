@@ -65,7 +65,7 @@ def orbit(
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
 
-    draw.body(s, radius, coastlines=coastlines)
+    draw.body(s, radius, coastlines=coastlines, orbit=el)
     draw.orbit(s, el, max_radius=4 * el.periapsis)
     draw.apsides(s, el, body_radius=radius, names=central.apsis_names)
     if not np.isclose(el.i, 0.0) and el.argp:
@@ -136,13 +136,14 @@ def orbits(
         units="km" if axes else None,
     )
     s = plate.scene
-    draw.body(s, radius, coastlines=coastlines)
+    sources = [as_elements(item) if _orbit_like(item) else item for item in orbits]
+    view = next((o for o in sources if isinstance(o, Elements)), None)
+    draw.body(s, radius, coastlines=coastlines, orbit=view, frame="plane")
     names = list(names or [])
     roles = list(roles or [])
-    for k, item in enumerate(orbits):
+    for k, source in enumerate(sources):
         role = roles[k] if k < len(roles) else _ROLES[k % len(_ROLES)]
         label = names[k] if k < len(names) else None
-        source = as_elements(item) if _orbit_like(item) else item
         max_radius = 4 * source.periapsis if isinstance(source, Elements) else None
         draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius)
     return plate
@@ -173,7 +174,8 @@ def hohmann(
     r1, r2 = _radius(r_initial), _radius(r_final)
     if np.isclose(r1, r2):
         raise ValueError("initial and final radii are the same: there is no transfer")
-    central = resolve_body(body, [o for o in (r_initial, r_final) if _orbit_like(o)])
+    given = [o for o in (r_initial, r_final) if _orbit_like(o)]
+    central = resolve_body(body, given)
     radius, mu = central.radius_km, central.mu_km3_s2
 
     a = (r1 + r2) / 2
@@ -186,7 +188,7 @@ def hohmann(
 
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
-    draw.body(s, radius)
+    draw.body(s, radius, orbit=as_elements(given[0]) if given else Elements(a=r1), frame="plane")
     draw.orbit(s, Elements(a=r1), role=st.SECONDARY, frame="plane", label=names[0], label_at=0.62)
     draw.orbit(s, Elements(a=r2), role=st.SECONDARY, frame="plane", label=names[1], label_at=0.88)
     s.line(half, st.TRANSFER, arrows=(0.5,))

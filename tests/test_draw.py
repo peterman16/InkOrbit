@@ -2,6 +2,7 @@ import numpy as np
 
 import inkorbit as ink
 from inkorbit import draw
+from inkorbit import geometry as geo
 from inkorbit import style as st
 from inkorbit.scene import Arrowhead, Fill, Label, Line, Marker
 
@@ -37,6 +38,40 @@ def test_body_draws_night_grid_and_outline():
     for item in scene.items:
         if isinstance(item, Line):
             assert np.all(np.hypot(*(item.points - 1.0).T) <= 2.0 + 1e-9)
+
+
+def _line_points(scene):
+    return [i.points for i in scene.items if isinstance(i, Line)]
+
+
+def test_body_without_orbit_keeps_tilt_and_spin():
+    # Reference: the globe as drawn before orbits could orient it.
+    tilt, spin = np.radians(20), np.radians(15)
+    step = np.degrees(np.radians(30))  # the default grid step, as draw.body converts it
+    expected = [2.0 * line for line in geo.graticule(geo.view_rotation(tilt, spin), step, step)]
+    scene = ink.Scene()
+    draw.body(scene, 2.0, spin=spin, sun=None)
+    lines = _line_points(scene)
+    assert len(lines) == len(expected) + 1  # plus the outline
+    assert all(np.allclose(a, b) for a, b in zip(lines, expected, strict=False))
+
+
+def test_body_seen_down_an_equatorial_orbit_has_concentric_latitudes():
+    scene = ink.Scene()
+    draw.body(scene, sun=None, orbit=ink.Elements(a=2.0))
+    for line in _line_points(scene):
+        # Each line is a circle about the pole or a radial meridian.
+        r = np.hypot(*line.T)
+        ux, uy = line[np.argmax(r)] / r.max()
+        assert np.allclose(r, r[0]) or np.allclose(line[:, 0] * uy - line[:, 1] * ux, 0)
+
+
+def test_body_orbit_replaces_tilt_and_spin_adds_a_turn():
+    el = ink.Elements(a=2.0, i=0.5, raan=0.3, argp=0.6)
+    a, b = ink.Scene(), ink.Scene()
+    draw.body(a, sun=None, orbit=el, tilt=1.0, spin=0.2)
+    draw.body(b, sun=None, orbit=ink.Elements(a=2.0, i=0.5, raan=0.5, argp=0.6))
+    assert all(np.allclose(p, q) for p, q in zip(_line_points(a), _line_points(b), strict=True))
 
 
 def test_body_without_sun_has_no_night_side():
