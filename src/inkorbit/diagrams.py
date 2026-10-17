@@ -21,6 +21,7 @@ from .adapters import is_orbit_like as _orbit_like
 from .bodies import Body
 from .elements import Elements
 from .plate import Plate
+from .printed import Printed
 from .scene import point_along
 
 
@@ -48,6 +49,7 @@ def orbit(
     page="figure",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """One orbit in its own plane, periapsis to the right, with its elements labelled.
 
@@ -60,10 +62,10 @@ def orbit(
     el = as_elements(orbit)
     central = resolve_body(body, [orbit])
     radius = body_radius if body_radius is not None else central.radius_km
-    plate = Plate(caption, page=page, style=style, labels=labels)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
 
-    draw.body(s, radius, coastlines=coastlines)
+    draw.body(s, radius, coastlines=coastlines, orbit=el)
     draw.orbit(s, el, max_radius=4 * el.periapsis)
     draw.apsides(s, el, body_radius=radius, names=central.apsis_names)
     if not np.isclose(el.i, 0.0) and el.argp:
@@ -110,6 +112,7 @@ def orbits(
     labels: bool = True,
     axes: bool = False,
     grid: bool = False,
+    printed: bool | Printed = False,
 ) -> Plate:
     """Several orbits about one body, drawn in their common plane.
 
@@ -122,18 +125,33 @@ def orbits(
         raise ValueError("pass at least one orbit")
     central = resolve_body(body, orbits)
     radius = body_radius if body_radius is not None else central.radius_km
-    plate = Plate(caption, page=page, style=style, labels=labels, axes=axes, grid=grid, units="km" if axes else None)
+    plate = Plate(
+        caption,
+        page=page,
+        style=style,
+        labels=labels,
+        printed=printed,
+        axes=axes,
+        grid=grid,
+        units="km" if axes else None,
+    )
     s = plate.scene
-    draw.body(s, radius, coastlines=coastlines)
+    sources = [as_elements(item) if _orbit_like(item) else item for item in orbits]
+    view = next((o for o in sources if isinstance(o, Elements)), None)
+    draw.body(s, radius, coastlines=coastlines, orbit=view, frame="plane")
     names = list(names or [])
     roles = list(roles or [])
-    for k, item in enumerate(orbits):
+    for k, source in enumerate(sources):
         role = roles[k] if k < len(roles) else _ROLES[k % len(_ROLES)]
         label = names[k] if k < len(names) else None
-        source = as_elements(item) if _orbit_like(item) else item
         max_radius = 4 * source.periapsis if isinstance(source, Elements) else None
-        draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius)
+        draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius, **_hug(source, radius))
     return plate
+
+
+def _hug(orbit, body_radius: float) -> dict:
+    """No direction arrowheads on elements close to the body: at true scale they sit on its limb."""
+    return {"arrows": ()} if isinstance(orbit, Elements) and orbit.periapsis < 1.1 * body_radius else {}
 
 
 # --- 3. Hohmann transfer -------------------------------------------------------------
@@ -150,6 +168,7 @@ def hohmann(
     page="figure",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """A Hohmann transfer between two circular coplanar orbits.
 
@@ -160,7 +179,8 @@ def hohmann(
     r1, r2 = _radius(r_initial), _radius(r_final)
     if np.isclose(r1, r2):
         raise ValueError("initial and final radii are the same: there is no transfer")
-    central = resolve_body(body, [o for o in (r_initial, r_final) if _orbit_like(o)])
+    given = [o for o in (r_initial, r_final) if _orbit_like(o)]
+    central = resolve_body(body, given)
     radius, mu = central.radius_km, central.mu_km3_s2
 
     a = (r1 + r2) / 2
@@ -171,11 +191,12 @@ def hohmann(
         # Start at apoapsis on the right and descend to periapsis on the left.
         half = geometry.rotate(transfer.points(nu_range=(np.pi, 2 * np.pi), n=361), np.pi)
 
-    plate = Plate(caption, page=page, style=style, labels=labels)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
-    draw.body(s, radius)
-    draw.orbit(s, Elements(a=r1), role=st.SECONDARY, frame="plane", label=names[0], label_at=0.62)
-    draw.orbit(s, Elements(a=r2), role=st.SECONDARY, frame="plane", label=names[1], label_at=0.88)
+    draw.body(s, radius, orbit=as_elements(given[0]) if given else Elements(a=r1), frame="plane")
+    for r, name, at in ((r1, names[0], 0.62), (r2, names[1], 0.88)):
+        el = Elements(a=r)
+        draw.orbit(s, el, role=st.SECONDARY, frame="plane", label=name, label_at=at, **_hug(el, radius))
     s.line(half, st.TRANSFER, arrows=(0.5,))
     s.label(names[2], point_along(half, 0.3)[0], priority=2)
 
@@ -231,6 +252,7 @@ def ground_track(
     page="map",
     style=None,
     labels: bool = True,
+    printed: bool | Printed = False,
 ) -> Plate:
     """A ground track on a ruled equirectangular map with coastlines.
 
@@ -242,7 +264,7 @@ def ground_track(
     the track. ``land="stipple"`` stipples the continents.
     """
     lat, lon = as_lat_lon(track, lon)
-    plate = Plate(caption, page=page, style=style, labels=labels, axes=True, grid=True)
+    plate = Plate(caption, page=page, style=style, labels=labels, printed=printed, axes=True, grid=True)
     s = plate.scene
     lim = float(latitude_limit)
     box = (-180.0, 180.0, -lim, lim)

@@ -89,6 +89,8 @@ def body(
     *,
     tilt: float = np.radians(20),
     spin: float = 0.0,
+    orbit: Elements | None = None,
+    frame: Frame = "perifocal",
     sun: float | None = np.pi,
     sun_elevation: float = np.radians(25),
     grid_step: float = np.radians(30),
@@ -100,7 +102,9 @@ def body(
     ``sun`` is the direction to the Sun in the drawing (radians, 0 = right),
     ``sun_elevation`` lifts it towards the viewer, which narrows the night side.
     ``sun=None`` draws no night side. ``tilt`` leans the north pole towards the
-    viewer and ``spin`` turns the globe about its axis. ``coastlines`` draws the
+    viewer and ``spin`` turns the globe about its axis. Given an ``orbit``, the
+    globe is seen down that orbit's normal, as drawn in ``frame``, in place of
+    ``tilt`` (longitude 0 is the vernal equinox). ``coastlines`` draws the
     Earth's coastlines on the visible hemisphere.
     """
     c = np.asarray(center, dtype=float)
@@ -111,7 +115,11 @@ def body(
         night = geo.night_side(direction)
         if night is not None:
             scene.fill(c + radius * night, "stipple")
-    rotation = geo.view_rotation(tilt, spin)
+    if orbit is None:
+        rotation = geo.view_rotation(tilt, spin)
+    else:
+        # A turn about the pole comes first, so it adds to the node: R3(raan) R3(spin).
+        rotation = geo.orbit_view_rotation(orbit.i, orbit.raan + spin, orbit.argp, orbit._rotation(frame))
     if grid_step:
         step = np.degrees(grid_step)
         for line in geo.graticule(rotation, step, step):
