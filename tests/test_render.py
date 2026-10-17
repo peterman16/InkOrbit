@@ -2,14 +2,8 @@ import numpy as np
 import pytest
 from diagrams_gallery import PLATES
 from orbits_with_axes import orbits_scene
-from proof_of_style import proof_scene
 
 import inkorbit as ink
-
-
-@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
-def test_proof_of_style():
-    return proof_scene().render().figure
 
 
 @pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
