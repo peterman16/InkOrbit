@@ -3,7 +3,7 @@
 Orbital diagrams in the style of 1960s black-and-white technical print: technical-pen
 line weights, stippled night sides, drafting arrowheads and single-stroke lettering.
 
-![Proof of style](docs/images/proof_of_style.png)
+![Orbit diagram](docs/images/orbit_diagram.png)
 
 For a short tour with every figure rendered, open [examples/tour.ipynb](examples/tour.ipynb).
 
@@ -96,7 +96,6 @@ hides them). Axes and a grid are off by default: `ink.Scene(axes=True, grid=True
 
 ```bash
 uv sync
-uv run python examples/proof_of_style.py
 uv run python examples/diagrams_gallery.py   # rewrites the images in docs/images
 uv run pytest
 ```

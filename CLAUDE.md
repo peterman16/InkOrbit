@@ -63,5 +63,5 @@ uv sync                                          # install
 uv run pytest                                    # tests, incl. image comparisons
 uv run ruff check . && uv run ruff format --check .
 uv run pytest --mpl-generate-path=tests/baseline # regenerate baselines (see guardrails)
-uv run python examples/proof_of_style.py         # the reference figure
+uv run python examples/diagrams_gallery.py       # the README images
 ```

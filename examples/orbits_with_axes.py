@@ -26,8 +26,8 @@ ESCAPE = ink.Elements(a=-20000, e=1.6, argp=np.radians(200))
 
 def orbits_scene() -> ink.Scene:
     scene = ink.Scene(caption="Figure 1.2-1  Orbits about the Earth", axes=True, grid=True, units="km")
-    draw.body(scene, R_EARTH, label="EARTH")
-    draw.orbit(scene, PARKING, role=st.SECONDARY, frame="plane", label="parking orbit")
+    draw.body(scene, R_EARTH, orbit=PARKING, frame="plane", label="EARTH")
+    draw.orbit(scene, PARKING, role=st.SECONDARY, frame="plane", arrows=(), label="parking orbit")
     draw.orbit(scene, TRANSFER, role=st.TRANSFER, frame="plane", label="transfer orbit")
     draw.orbit(scene, ESCAPE, frame="plane", max_radius=45000, label="escape hyperbola")
     draw.apsides(scene, TRANSFER, body_radius=R_EARTH, frame="plane")
