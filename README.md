@@ -40,6 +40,17 @@ imports poliastro, hapsira or astropy itself, so install whichever you use:
 - a Skyfield position over several times as a ground track (`ink.diagram("ground_track", sat.at(t))`)
   or as an orbit's sampled positions.
 
+### The globe
+
+Bodies are drawn to scale, in the same units as the orbits. The globe is seen the way the
+diagram is: looking down the orbit's normal. An equatorial orbit shows the north pole
+straight at you with concentric latitude circles, and an inclined orbit tips the pole
+over by its inclination, towards where its argument of periapsis puts it. There is no
+date, so longitude 0 faces the vernal equinox; the night side keeps a fixed Sun direction.
+
+An orbit that comes within 10% of the body's radius gets no direction arrowheads: at true
+scale it lies on the globe's outline, and arrowheads there read as marks on the limb.
+
 ## Printed mode
 
 `printed=True` turns the finished image into a two-colour bitmap that looks scanned from
@@ -65,7 +76,7 @@ from inkorbit import draw
 orbit = ink.Elements(a=2.6, e=0.55, nu=np.radians(110))  # Earth radii, radians
 
 scene = ink.Scene(caption="Figure 1.1-1  Elliptical orbit about the Earth")
-draw.body(scene, radius=1.0, tilt=np.radians(25))
+draw.body(scene, radius=1.0, orbit=orbit)  # seen down the orbit's normal
 draw.orbit(scene, orbit)
 draw.apsides(scene, orbit, body_radius=1.0)  # perigee, apogee, line of apsides
 draw.radius_vector(scene, orbit, body_radius=1.0)
@@ -75,7 +86,8 @@ draw.true_anomaly(scene, orbit, radius=1.5)
 scene.render().savefig("orbit.png")
 ```
 
-Labels are placed automatically so they avoid lines and each other (`scene.labels = False`
+Without an `orbit`, `draw.body` takes a free `tilt` (pole towards the viewer) and `spin`
+instead. Labels are placed automatically so they avoid lines and each other (`scene.labels = False`
 hides them). Axes and a grid are off by default: `ink.Scene(axes=True, grid=True, units="km")`.
 
 ![Orbits with axes](docs/images/orbits_with_axes.png)
@@ -85,7 +97,16 @@ hides them). Axes and a grid are off by default: `ink.Scene(axes=True, grid=True
 ```bash
 uv sync
 uv run python examples/proof_of_style.py
+uv run python examples/diagrams_gallery.py   # rewrites the images in docs/images
 uv run pytest
+```
+
+The tour notebook is committed with its outputs and is not run in CI. To re-run it without
+adding Jupyter to the project:
+
+```bash
+cd examples
+uv run --with jupyter jupyter nbconvert --to notebook --execute --inplace tour.ipynb
 ```
 
 ## How it fits together
@@ -105,6 +126,8 @@ data coordinates    page millimetres       matplotlib (for now)
   arrows, markers and fill patterns into plain ink: strokes, solid polygons and dots.
 - **Renderers** draw only those three things, so adding a backend besides matplotlib
   is small.
+- **`printed`**: optional post-processing of the rendered page into a two-colour bitmap
+  (printed mode). It never touches the drawing, so every backend gets it.
 
 ```python
 import inkorbit as ink
@@ -120,7 +143,8 @@ fig.savefig("transfer.png")  # 300 dpi
 fig.data_ax.plot(...)  # keep drawing with matplotlib, in data units
 ```
 
-In Jupyter a `Scene` (or a rendered figure) displays itself as the last line of a cell.
+In Jupyter a `Plate`, a `Scene` or a rendered figure displays itself as the last line of
+a cell (a printed plate at 300 dpi, so its thin pens survive).
 
 ## Credits
 

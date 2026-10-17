@@ -35,9 +35,9 @@ all of them and imports none of them. Nothing in the core imports an adapter.
 | `geometry.py` | Plane geometry: conics, arcs, rotations | orbit-engineer |
 | `elements.py` | `Elements` dataclass, frames (from step 2) | orbit-engineer |
 | `draw.py` | Primitives: orbit, body, apsides, nodes, angles, vectors (from step 2) | orbit-engineer |
-| diagrams / `Plate` | Named diagrams built from `draw` (planned, step 3) | orbit-engineer |
-| adapters | poliastro/hapsira, Skyfield, astropy as optional extras (planned, step 3) | orbit-engineer |
-| printed mode | Post-processing of the rendered image (planned, step 4) | render-engineer |
+| `diagrams.py` / `plate.py` | Named diagrams built from `draw`; `Plate` | orbit-engineer |
+| `adapters.py` | poliastro/hapsira, Skyfield, astropy objects read by attribute; Skyfield imported lazily for ground tracks only | orbit-engineer |
+| `printed.py` | Printed mode: rendered page to a 1-bit ink/paper bitmap (spread, grain, skew). Pure numpy. | render-engineer |
 
 ## Where new code goes
 
@@ -58,3 +58,9 @@ Add one line per structural decision: date, decision, reason.
 - 2026-10: Hershey vector fonts for lettering, so text is inked like every other line.
 - 2026-10: No propagation in the core; adapters convert library objects to `Elements`
   or arrays.
+- 2026-10-16: Printed mode is a post-render step: `RenderedFigure.to_array` → `printed.apply` →
+  1-bit bitmap. Renderers only rasterise; `Plate` orchestrates. Strictly two colours, seeded
+  (default 0); SVG/PDF embed the bitmap. numpy only, no direct Pillow import.
+- 2026-10-17: The globe is oriented from the orbit's own frame (`geometry.orbit_view_rotation`),
+  longitude 0 at the vernal equinox since there is no epoch. Bodies stay to scale; orbits within
+  10% of the body radius drop their arrowheads instead.
