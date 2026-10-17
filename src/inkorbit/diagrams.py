@@ -145,8 +145,13 @@ def orbits(
         role = roles[k] if k < len(roles) else _ROLES[k % len(_ROLES)]
         label = names[k] if k < len(names) else None
         max_radius = 4 * source.periapsis if isinstance(source, Elements) else None
-        draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius)
+        draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius, **_hug(source, radius))
     return plate
+
+
+def _hug(orbit, body_radius: float) -> dict:
+    """No direction arrowheads on elements close to the body: at true scale they sit on its limb."""
+    return {"arrows": ()} if isinstance(orbit, Elements) and orbit.periapsis < 1.1 * body_radius else {}
 
 
 # --- 3. Hohmann transfer -------------------------------------------------------------
@@ -189,8 +194,9 @@ def hohmann(
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
     draw.body(s, radius, orbit=as_elements(given[0]) if given else Elements(a=r1), frame="plane")
-    draw.orbit(s, Elements(a=r1), role=st.SECONDARY, frame="plane", label=names[0], label_at=0.62)
-    draw.orbit(s, Elements(a=r2), role=st.SECONDARY, frame="plane", label=names[1], label_at=0.88)
+    for r, name, at in ((r1, names[0], 0.62), (r2, names[1], 0.88)):
+        el = Elements(a=r)
+        draw.orbit(s, el, role=st.SECONDARY, frame="plane", label=name, label_at=at, **_hug(el, radius))
     s.line(half, st.TRANSFER, arrows=(0.5,))
     s.label(names[2], point_along(half, 0.3)[0], priority=2)
 

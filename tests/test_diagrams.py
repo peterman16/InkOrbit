@@ -1,9 +1,12 @@
+import itertools
+
 import numpy as np
 import pytest
 
 import inkorbit as ink
 from inkorbit import geometry, maps
-from inkorbit.scene import Label, Line
+from inkorbit import style as st
+from inkorbit.scene import Arrowhead, Label, Line
 
 
 def _labels(plate):
@@ -39,6 +42,18 @@ def test_hohmann_delta_v_matches_textbook_leo_to_geo():
     notes = dict(n.split(" = ") for n in plate.scene.notes)
     assert notes["total Δv"] == "3.893 km/s"  # LEO (300 km) to GEO is the classic ~3.9 km/s
     assert notes["time of flight"] == "5.28 h"
+
+
+def test_hohmann_initial_orbit_hugging_the_body_has_no_arrows():
+    items = ink.diagram("hohmann", 6678, 42_164).scene.items
+    # Arrowheads follow the line they belong to.
+    initial, final, transfer = (
+        sum(1 for _ in itertools.takewhile(lambda i: isinstance(i, Arrowhead), items[k + 1 :]))
+        for k, item in enumerate(items)
+        if isinstance(item, Line) and item.role in (st.SECONDARY, st.TRANSFER)
+    )
+    assert initial == 0  # 300 km up: within 10% of the Earth's radius
+    assert final > 0 and transfer > 0
 
 
 def test_hohmann_downward_and_errors():
