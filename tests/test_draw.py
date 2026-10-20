@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import inkorbit as ink
 from inkorbit import draw
@@ -119,3 +120,20 @@ def test_nodes_line():
     scene = ink.Scene()
     draw.nodes(scene, ink.Elements(a=2.0, e=0.3, i=0.5, argp=np.radians(40)), body_radius=0.5)
     assert [i.text for i in scene.items if isinstance(i, Label)] == ["ascending node", "descending node"]
+
+
+def _surface_lines(scene):
+    return [i for i in scene.items if isinstance(i, Line) and i.role == st.SURFACE]
+
+
+def test_surface_is_drawn_only_for_bodies_with_features():
+    earth, moon = ink.Scene(), ink.Scene()
+    draw.body(earth, 1.0, body="earth", surface=True)
+    draw.body(moon, 1.0, body="moon", surface=True)
+    assert _surface_lines(earth)
+    assert not _surface_lines(moon)  # never falls back to Earth's coastlines
+
+
+def test_surface_needs_a_body():
+    with pytest.raises(ValueError, match="surface needs body="):
+        draw.body(ink.Scene(), 1.0, surface=True)

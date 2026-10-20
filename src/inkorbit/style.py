@@ -29,7 +29,7 @@ OUTLINE = "outline"  # body outlines, terminators
 HIDDEN = "hidden"  # geometry behind a body
 GRID = "grid"  # chart grids; labels may sit on them
 GRATICULE = "graticule"  # latitude/longitude lines drawn on a globe
-COASTLINE = "coastline"
+SURFACE = "surface"  # surface features drawn on a globe
 AXIS = "axis"
 BORDER = "border"
 
@@ -47,7 +47,7 @@ _DEFAULT_PENS = {
     HIDDEN: Pen(0.25, _DASHED),
     GRID: Pen(0.18),
     GRATICULE: Pen(0.18),
-    COASTLINE: Pen(0.25),
+    SURFACE: Pen(0.25),
     AXIS: Pen(0.25),
     BORDER: Pen(0.5),
 }

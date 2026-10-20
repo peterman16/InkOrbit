@@ -42,7 +42,7 @@ def orbit() -> ink.Plate:
         name="spacecraft",
         vectors=True,  # radius and velocity vectors
         elements_table=True,  # the table of elements under the figure
-        coastlines=False,  # continents on the globe
+        surface=False,  # surface features on the globe
         printed=PRINTED,
     )
 
@@ -90,7 +90,7 @@ def ground_track() -> ink.Plate:
 def custom() -> ink.Plate:
     """Build a figure piece by piece. Every inkorbit.draw function is a method on Plate."""
     plate = ink.Plate("Figure 5  Built by hand", axes=True, grid=True, units="km", printed=PRINTED)
-    plate.body(R_EARTH, orbit=ORBIT, frame="plane", spin=np.radians(0), coastlines=False, label="EARTH")
+    plate.body(R_EARTH, orbit=ORBIT, frame="plane", spin=np.radians(0), body="earth", surface=False, label="EARTH")
     plate.orbit(ORBIT, frame="plane", label="transfer orbit")
     plate.apsides(ORBIT, body_radius=R_EARTH, frame="plane")
     plate.spacecraft(ORBIT, frame="plane", label="S-IVB")

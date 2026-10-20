@@ -45,7 +45,7 @@ def orbit(
     name: str = "spacecraft",
     vectors: bool = True,
     elements_table: bool = True,
-    coastlines: bool = False,
+    surface: bool = False,
     page="figure",
     style=None,
     labels: bool = True,
@@ -65,7 +65,7 @@ def orbit(
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
 
-    draw.body(s, radius, coastlines=coastlines, orbit=el)
+    draw.body(s, radius, body=central, surface=surface, orbit=el)
     draw.orbit(s, el, max_radius=4 * el.periapsis)
     draw.apsides(s, el, body_radius=radius, names=central.apsis_names)
     if not np.isclose(el.i, 0.0) and el.argp:
@@ -106,7 +106,7 @@ def orbits(
     body: str | Body | None = None,
     body_radius: float | None = None,
     caption: str | None = None,
-    coastlines: bool = False,
+    surface: bool = False,
     page="figure",
     style=None,
     labels: bool = True,
@@ -138,7 +138,7 @@ def orbits(
     s = plate.scene
     sources = [as_elements(item) if _orbit_like(item) else item for item in orbits]
     view = next((o for o in sources if isinstance(o, Elements)), None)
-    draw.body(s, radius, coastlines=coastlines, orbit=view, frame="plane")
+    draw.body(s, radius, body=central, surface=surface, orbit=view, frame="plane")
     names = list(names or [])
     roles = list(roles or [])
     for k, source in enumerate(sources):
@@ -165,6 +165,7 @@ def hohmann(
     caption: str | None = None,
     names: tuple[str, str, str] = ("initial orbit", "final orbit", "transfer orbit"),
     delta_v: bool = True,
+    surface: bool = False,
     page="figure",
     style=None,
     labels: bool = True,
@@ -193,7 +194,14 @@ def hohmann(
 
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
-    draw.body(s, radius, orbit=as_elements(given[0]) if given else Elements(a=r1), frame="plane")
+    draw.body(
+        s,
+        radius,
+        body=central,
+        surface=surface,
+        orbit=as_elements(given[0]) if given else Elements(a=r1),
+        frame="plane",
+    )
     for r, name, at in ((r1, names[0], 0.62), (r2, names[1], 0.88)):
         el = Elements(a=r)
         draw.orbit(s, el, role=st.SECONDARY, frame="plane", label=name, label_at=at, **_hug(el, radius))
@@ -283,7 +291,7 @@ def ground_track(
         raise ValueError("land must be None or 'stipple'")
     for coast in maps.coastlines():
         for run in geometry.clip_polyline(coast, *box):
-            s.line(run, st.COASTLINE)
+            s.line(run, st.SURFACE)
 
     runs = []
     for run in maps.split_at_antimeridian(lon, lat):

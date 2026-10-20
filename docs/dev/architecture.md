@@ -36,6 +36,7 @@ all of them and imports none of them. Nothing in the core imports an adapter.
 | `elements.py` | `Elements` dataclass, frames (from step 2) | orbit-engineer |
 | `draw.py` | Primitives: orbit, body, apsides, nodes, angles, vectors (from step 2) | orbit-engineer |
 | `diagrams.py` / `plate.py` | Named diagrams built from `draw`; `Plate` | orbit-engineer |
+| `surfaces.py` | Per-body surface features as lon/lat polylines (USGS Gazetteer, Natural Earth, stylised bands); data in `data/<body>_surface.npz` | orbit-engineer |
 | `adapters.py` | poliastro/hapsira, Skyfield, astropy objects read by attribute; Skyfield imported lazily for ground tracks only | orbit-engineer |
 | `printed.py` | Printed mode: rendered page to a 1-bit ink/paper bitmap (spread, grain, skew). Pure numpy. | render-engineer |
 
@@ -64,3 +65,4 @@ Add one line per structural decision: date, decision, reason.
 - 2026-10-17: The globe is oriented from the orbit's own frame (`geometry.orbit_view_rotation`),
   longitude 0 at the vernal equinox since there is no epoch. Bodies stay to scale; orbits within
   10% of the body radius drop their arrowheads instead.
+- 2026-10-20: Surface features replace coastlines. `draw.body(body=, surface=)` never assumes Earth (KAN-18). One SURFACE role. Body-fixed longitude 0 sits at the globe's longitude 0; spin rotates. Gazetteer centre+diameter rings; gas-giant bands are constants; no new deps.
