@@ -9,9 +9,10 @@ Usage (one body at a time; BODY is MOON, MERCURY, VENUS or MARS):
     python tools/build_surfaces.py BODY_nomenclature_center_pts.zip src/inkorbit/data/body_surface.npz
 
 Filter: IAU-approved features whose type is a crater (on the Moon also lettered satellite craters), mare or
-oceanus, mons or planitia, with diameter at or above the body's MIN_DIAMETER_KM. The minimums keep each file
-under ~50 KB. Output arrays, sorted largest first: lat and lon in degrees (planetocentric, east longitude in
-[-180, 180)), diameter_km, and kind, an index into the kinds array.
+oceanus, mons or planitia (on Venus also terra and regio), with diameter at or above the body's
+MIN_DIAMETER_KM. The minimums keep each file under ~50 KB. Output arrays, sorted largest first: lat and lon
+in degrees (planetocentric, east longitude in [-180, 180)), diameter_km, and kind, an index into the kinds
+array.
 """
 
 import struct
@@ -22,7 +23,7 @@ import numpy as np
 
 MIN_DIAMETER_KM = {"MOON": 20.0, "MERCURY": 1.0, "VENUS": 1.0, "MARS": 1.0}
 
-KINDS = ("crater", "mare", "mons", "planitia")
+KINDS = ("crater", "mare", "mons", "planitia", "terra", "regio")
 _KIND_OF_TYPE = {
     "Crater, craters": "crater",
     "Satellite Feature": "crater",  # lettered craters next to a named one, e.g. Tycho A
@@ -31,6 +32,8 @@ _KIND_OF_TYPE = {
     "Mons, montes": "mons",
     "Planitia, planitiae": "planitia",
 }
+# Venus's best-known features (Ishtar, Aphrodite) are terrae and regiones; elsewhere they would only add clutter.
+_EXTRA_KIND_OF_TYPE = {"VENUS": {"Terra, terrae": "terra", "Regio, regiones": "regio"}}
 
 
 def _dbf_records(data):
@@ -56,11 +59,12 @@ def main(zip_path, out_path):
         (dbf_name,) = [n for n in z.namelist() if n.endswith(".dbf")]
         body = dbf_name.split("_")[0].upper()
         records = list(_dbf_records(z.read(dbf_name)))
+    kind_of_type = _KIND_OF_TYPE | _EXTRA_KIND_OF_TYPE.get(body, {})
     rows = [
-        (float(r["center_lat"]), float(r["center_lon"]), float(r["diameter"]), KINDS.index(_KIND_OF_TYPE[r["type"]]))
+        (float(r["center_lat"]), float(r["center_lon"]), float(r["diameter"]), KINDS.index(kind_of_type[r["type"]]))
         for r in records
         if r["approval"] == "Adopted by IAU"
-        and r["type"] in _KIND_OF_TYPE
+        and r["type"] in kind_of_type
         and float(r["diameter"]) >= MIN_DIAMETER_KM[body]
     ]
     rows.sort(key=lambda row: -row[2])
