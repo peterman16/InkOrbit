@@ -126,6 +126,10 @@ def body(
     else:
         # A turn about the pole comes first, so it adds to the node: R3(raan) R3(spin).
         rotation = geo.orbit_view_rotation(orbit.i, orbit.raan + spin, orbit.argp, orbit._rotation(frame))
+    if surface:
+        for belt in surfaces.belts(body):
+            for poly in geo.belt_polygons(rotation, *belt):
+                scene.fill(c + radius * poly, "stipple")
     if grid_step:
         step = np.degrees(grid_step)
         for line in geo.graticule(rotation, step, step):

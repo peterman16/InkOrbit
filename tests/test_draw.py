@@ -145,3 +145,48 @@ def test_gas_giant_bands_and_great_red_spot():
     assert surfaces.features("saturn") and not surfaces.features("neptune")
     jupiter = surfaces.features("jupiter")
     assert jupiter and np.allclose(jupiter[-1][0], jupiter[-1][-1])  # the spot outline is closed
+
+
+def _area(poly):
+    return abs(geo._signed_area(poly))
+
+
+def _strip(y):  # area of the unit disc below the chord at height y, plus pi/2 (analytic orthographic belt area)
+    return y * np.sqrt(1 - y * y) + np.arcsin(y)
+
+
+def test_equatorial_belt_at_zero_tilt_is_the_analytic_strip():
+    (poly,) = geo.belt_polygons(geo.view_rotation(0.0), 7, 17)
+    expected = _strip(np.sin(np.radians(17))) - _strip(np.sin(np.radians(7)))  # y = sin(lat) when seen edge-on
+    assert _area(poly) == pytest.approx(expected, rel=2e-3)
+
+
+def test_belt_polygons_stay_in_the_disc_for_every_view():
+    for tilt in np.radians([0, 20, 60, 89, 90, -90, -45]):
+        for belt in [(7, 17), (-20, -7), (45, 90), (-90, -45), (20, 35), (-7, 7)]:
+            for poly in geo.belt_polygons(geo.view_rotation(tilt, 0.7), *belt):
+                assert np.all(np.hypot(*poly.T) <= 1 + 1e-9)
+
+
+def test_pole_on_cap_is_a_disc_and_pole_on_belt_is_a_ring():
+    pole_on = geo.view_rotation(np.pi / 2)
+    (cap,) = geo.belt_polygons(pole_on, 45, 90)
+    assert np.hypot(*cap.T).max() == pytest.approx(np.cos(np.radians(45)))
+    assert geo.belt_polygons(pole_on, -90, -45) == []  # the far pole is hidden
+    (ring,) = geo.belt_polygons(pole_on, 20, 35)
+    assert _area(ring) == pytest.approx(np.pi * (np.cos(np.radians(20)) ** 2 - np.cos(np.radians(35)) ** 2), rel=2e-3)
+
+
+def test_belt_crossing_the_limb_is_one_polygon_with_both_edges():
+    (poly,) = geo.belt_polygons(geo.view_rotation(np.radians(20)), 45, 90)
+    assert np.isclose(np.hypot(*poly.T).max(), 1.0)  # reaches the limb
+    assert poly[:, 1].max() > 0.9  # and the cap near the pole
+
+
+def test_belts_stipple_jupiter_but_not_neptune():
+    def fills(name):
+        s = ink.Scene()
+        draw.body(s, 1.0, body=name, surface=True, sun=None)
+        return [i for i in s.items if isinstance(i, Fill)]
+
+    assert fills("jupiter") and not fills("neptune")
