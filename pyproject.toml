@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/peterman16/PrettyAstrodynamics"
+Repository = "https://github.com/peterman16/InkOrbit"
 
 [dependency-groups]
 dev = [
