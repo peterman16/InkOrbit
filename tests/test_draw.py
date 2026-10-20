@@ -137,3 +137,11 @@ def test_surface_is_drawn_only_for_bodies_with_features():
 def test_surface_needs_a_body():
     with pytest.raises(ValueError, match="surface needs body="):
         draw.body(ink.Scene(), 1.0, surface=True)
+
+
+def test_gas_giant_bands_and_great_red_spot():
+    from inkorbit import surfaces
+
+    assert surfaces.features("saturn") and not surfaces.features("neptune")
+    jupiter = surfaces.features("jupiter")
+    assert jupiter and np.allclose(jupiter[-1][0], jupiter[-1][-1])  # the spot outline is closed
