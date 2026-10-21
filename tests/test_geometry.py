@@ -66,3 +66,17 @@ def test_plane_frame_turns_the_pole_in_plane():
 def test_orbit_view_rotation_is_a_rotation():
     rotation = geo.orbit_view_rotation(0.3, 1.2, -0.8, 0.5)
     assert np.allclose(rotation @ rotation.T, np.eye(3)) and np.isclose(np.linalg.det(rotation), 1.0)
+
+
+def test_with_holes_even_odd_fill():
+    # Outer 4x4 square with a 1x1 hole in the middle: stipple and hatch must avoid the hole, not the rest.
+    from inkorbit import patterns
+
+    outer = np.array([[0, 0], [4, 0], [4, 4], [0, 4.0]])
+    hole = np.array([[1.5, 1.5], [2.5, 1.5], [2.5, 2.5], [1.5, 2.5]])
+    ring = geo.with_holes(outer, [hole])
+    dots = patterns.stipple(ring, 0.2)
+    in_hole = (np.abs(dots - 2) < 0.5).all(axis=1)
+    assert len(dots) > 0 and not in_hole.any() and (~in_hole).any()
+    for seg in patterns.hatch(ring, 0.25, 0):
+        assert not (seg[:, 0].min() < 2.5 and seg[:, 0].max() > 1.5 and 1.5 < seg[0, 1] < 2.5)

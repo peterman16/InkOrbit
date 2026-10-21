@@ -242,6 +242,16 @@ def _signed_area(poly: np.ndarray) -> float:
     return 0.5 * float(np.sum(poly[:-1, 0] * poly[1:, 1] - poly[1:, 0] * poly[:-1, 1]))
 
 
+def with_holes(outer: np.ndarray, holes: list[np.ndarray]) -> np.ndarray:
+    """One ring filling ``outer`` minus ``holes`` under the even-odd rule, for a renderer that fills a single polygon.
+
+    Each ring is closed, and after each hole the path returns to the start of ``outer``; the two bridge edges to
+    and from a hole coincide and cancel. Holes must lie inside ``outer`` and must not overlap each other.
+    """
+    closed = [r if np.allclose(r[0], r[-1]) else np.vstack([r, r[:1]]) for r in (outer, *holes)]
+    return np.vstack([closed[0], *[np.vstack([h, closed[0][:1]]) for h in closed[1:]]])
+
+
 def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.ndarray]:
     """Visible part of the latitude belt ``south``..``north`` (degrees) of a unit globe, as 2D polygons.
 
@@ -310,11 +320,9 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
     if not polys and (holes or in_belt(np.array([0.0, 0.0, 1.0]))):
         a = np.linspace(-np.pi, np.pi, 361)
         polys = [np.column_stack([np.cos(a), np.sin(a)])]
-    for hole in holes:
-        if polys:
-            if _signed_area(hole) * _signed_area(polys[0]) > 0:
-                hole = hole[::-1]
-            polys[0] = np.vstack([polys[0][:1], hole, polys[0]])
+    if polys:
+        holes = [h[::-1] if _signed_area(h) * _signed_area(polys[0]) > 0 else h for h in holes]
+        polys[0] = with_holes(polys[0], holes)
     return polys
 
 
