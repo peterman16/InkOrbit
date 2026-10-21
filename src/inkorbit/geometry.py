@@ -382,6 +382,14 @@ def ring_polygons(rotation: np.ndarray, lonlat_ring) -> list[np.ndarray]:
     return _join_on_limb(_limb_pieces(pts), inside)
 
 
+def outside_caps(points3: np.ndarray, caps: list[tuple[np.ndarray, float]]) -> np.ndarray:
+    """Mask of unit 3D ``points3`` lying outside every cap (unit centre vector, angular radius in radians)."""
+    mask = np.ones(len(points3), bool)
+    for centre, radius in caps:
+        mask &= points3 @ centre < np.cos(radius)
+    return mask
+
+
 def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) -> list[np.ndarray]:
     """Visible part of the cap of angular ``radius`` about (``lat``, ``lon``), all in degrees, as 2D polygons.
 
@@ -391,3 +399,17 @@ def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) ->
     centre = np.array([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
     east = np.array([-np.sin(lo), np.cos(lo), 0.0])
     return belt_polygons(rotation @ np.column_stack([east, np.cross(centre, east), centre]), 90 - radius, 90)
+
+
+def destination(lat, lon, bearing, dist):
+    """Point reached from (lat, lon) along an initial bearing for an angular distance on the unit sphere.
+
+    All arguments and results are in degrees (broadcast as numpy arrays); the bearing is
+    clockwise from north. The returned east longitude is wrapped to [-180, 180).
+    """
+    lat1, lon1, brg, d = np.radians(
+        np.broadcast_arrays(*(np.asarray(v, dtype=float) for v in (lat, lon, bearing, dist)))
+    )
+    lat2 = np.arcsin(np.sin(lat1) * np.cos(d) + np.cos(lat1) * np.sin(d) * np.cos(brg))
+    lon2 = lon1 + np.arctan2(np.sin(brg) * np.sin(d) * np.cos(lat1), np.cos(d) - np.sin(lat1) * np.sin(lat2))
+    return np.degrees(lat2), (np.degrees(lon2) + 180.0) % 360.0 - 180.0
