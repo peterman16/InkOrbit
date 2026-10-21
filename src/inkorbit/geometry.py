@@ -318,6 +318,14 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
     return polys
 
 
+def outside_caps(points3: np.ndarray, caps: list[tuple[np.ndarray, float]]) -> np.ndarray:
+    """Mask of unit 3D ``points3`` lying outside every cap (unit centre vector, angular radius in radians)."""
+    mask = np.ones(len(points3), bool)
+    for centre, radius in caps:
+        mask &= points3 @ centre < np.cos(radius)
+    return mask
+
+
 def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) -> list[np.ndarray]:
     """Visible part of the cap of angular ``radius`` about (``lat``, ``lon``), all in degrees, as 2D polygons.
 

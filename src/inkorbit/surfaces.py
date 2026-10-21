@@ -8,6 +8,7 @@ from importlib import resources
 
 import numpy as np
 
+from . import geometry
 from .bodies import Body, get_body
 from .maps import coastlines, small_circle
 
@@ -18,6 +19,8 @@ from .maps import coastlines, small_circle
 _LINE_KINDS, _AREA_KINDS = (0, 2), (1, 3, 4, 5)
 _LINE_FRACTION, _AREA_FRACTION = (0.03, 0.5), (0.03, 0.6)
 _MAX_RINGS = 100
+_CRATER_FRACTION = (0.02, 0.15)
+_RIM_HARMONICS, _RIM_AMPLITUDE = (2, 3, 5, 7), (0.01, 0.035)  # of the radius: slightly polygonal, hand-drawn rims
 _GAZETTEER = ("moon", "mercury", "venus", "mars")
 
 # Dark cloud belts as (south, north) planetographic latitudes in degrees. Stylised and approximate, not data.
@@ -75,6 +78,42 @@ def areas(body: str | Body) -> list[tuple[float, float, float]]:
     """Broad surface areas (maria, plains, highlands) as (lat, lon, angular radius) caps in degrees."""
     body = get_body(body)
     return _caps(body, _AREA_KINDS, _AREA_FRACTION) if body.name.lower() in _GAZETTEER else []
+
+
+def craters(body: str | Body) -> list[tuple[float, float, float, bool]]:
+    """Craters and mountains as (lat, lon, angular radius, is_mons) in degrees, largest first; empty if none."""
+    body = get_body(body)
+    if body.name.lower() not in _GAZETTEER:
+        return []
+    found = [(*c, mons) for mons in (False, True) for c in _caps(body, (2 if mons else 0,), _CRATER_FRACTION)]
+    return sorted(found, key=lambda c: -c[2])[:_MAX_RINGS]
+
+
+def rim(body: str | Body, i: int, lat: float, lon: float, r: float) -> np.ndarray:
+    """Hand-drawn rim of feature ``i`` of ``body``: a closed (N, 2) ring of (lon, lat) degrees, cap radius ``r``.
+
+    The radius gets a few low harmonics with seeded phases, so every render is the same.
+    """
+    rng = np.random.default_rng(zlib.crc32(f"{get_body(body).name}{i}".encode()))
+    t = np.linspace(0.0, 360.0, 181)
+    rr = np.full_like(t, r)
+    for k in _RIM_HARMONICS:
+        rr += r * rng.uniform(*_RIM_AMPLITUDE) * np.cos(k * np.radians(t) + rng.uniform(0, 2 * np.pi))
+    return np.column_stack(geometry.destination(lat, lon, t, rr)[::-1])
+
+
+def shadow(lat: float, lon: float, r: float, mons: bool = False) -> np.ndarray:
+    """Crescent of shadow as an (N, 2) ring of (lon, lat) degrees, for light from the west.
+
+    A crater is shaded inside its west wall; a mountain outside its east flank. The outer edge is half the
+    rim, the other a half-ellipse of the same north-south extent (0.35 r or 1.25 r east-west).
+    """
+    t = np.linspace(-np.pi / 2, np.pi / 2, 40) + (0.0 if mons else np.pi)  # east half, or west half
+    x, y = np.cos(t), np.sin(t)
+    x = np.concatenate([r * x, (1.25 if mons else 0.35) * r * x[::-1]])
+    y = r * np.concatenate([y, y[::-1]])
+    # local tangent offsets (x east, y north) as bearing and distance
+    return np.column_stack(geometry.destination(lat, lon, np.degrees(np.arctan2(x, y)), np.hypot(x, y))[::-1])
 
 
 def features(body: str | Body) -> list[np.ndarray]:
