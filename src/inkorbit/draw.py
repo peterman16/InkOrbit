@@ -127,8 +127,9 @@ def body(
         # A turn about the pole comes first, so it adds to the node: R3(raan) R3(spin).
         rotation = geo.orbit_view_rotation(orbit.i, orbit.raan + spin, orbit.argp, orbit._rotation(frame))
     if surface:
-        for belt in surfaces.belts(body):
-            for poly in geo.belt_polygons(rotation, *belt):
+        lon = np.linspace(-180, 180, 361, endpoint=False)
+        for south, north in surfaces.belts(body):
+            for poly in geo.belt_polygons(rotation, surfaces.edge(body, south, lon), surfaces.edge(body, north, lon)):
                 scene.fill(c + radius * poly, "stipple")
     if grid_step:
         step = np.degrees(grid_step)

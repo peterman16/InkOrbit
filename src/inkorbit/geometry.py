@@ -242,8 +242,10 @@ def _signed_area(poly: np.ndarray) -> float:
     return 0.5 * float(np.sum(poly[:-1, 0] * poly[1:, 1] - poly[1:, 0] * poly[:-1, 1]))
 
 
-def belt_polygons(rotation: np.ndarray, south: float, north: float, n: int = 361) -> list[np.ndarray]:
+def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.ndarray]:
     """Visible part of the latitude belt ``south``..``north`` (degrees) of a unit globe, as 2D polygons.
+
+    Each edge is a latitude or an array of ``n`` latitudes at longitudes ``linspace(-180, 180, n, endpoint=False)``.
 
     Each polygon is closed (first point repeated) and lies in the unit disc. The result has 0, 1 or
     more polygons. Edges are the visible arcs of the two latitude circles, joined by arcs of the
@@ -252,15 +254,21 @@ def belt_polygons(rotation: np.ndarray, south: float, north: float, n: int = 361
     """
     pole = rotation[:, 2]  # the north pole in the view frame
 
-    def in_belt(v: np.ndarray) -> bool:
-        return south <= np.degrees(np.arcsin(np.clip(v @ pole, -1.0, 1.0))) <= north
-
     t = np.linspace(-np.pi, np.pi, n, endpoint=False)
+    south, north = (np.broadcast_to(np.asarray(e, float), t.shape) for e in (south, north))
+
+    def in_belt(v: np.ndarray) -> bool:
+        x, y, z = v @ rotation  # body frame
+        lon, lat = np.degrees(np.arctan2(y, x)), np.degrees(np.arcsin(np.clip(z, -1.0, 1.0)))
+        return (
+            np.interp(lon, np.degrees(t), south, period=360) <= lat <= np.interp(lon, np.degrees(t), north, period=360)
+        )
+
     pieces: list[np.ndarray] = []
     outers: list[np.ndarray] = []
     holes: list[np.ndarray] = []
     for lat, is_south in ((south, True), (north, False)):
-        if abs(lat) >= 90:
+        if np.all(np.abs(lat) >= 90):
             continue
         pts = lat_lon_to_view(np.radians(lat), t, rotation)
         if np.all(pts[:, 2] >= 0):
