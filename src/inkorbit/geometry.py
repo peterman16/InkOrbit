@@ -236,3 +236,83 @@ def clip_polygon(polygon: np.ndarray, xmin: float, xmax: float, ymin: float, yma
                 result.append(cur)
         out = np.array(result)
     return out if len(out) >= 3 else None
+
+
+def _signed_area(poly: np.ndarray) -> float:
+    return 0.5 * float(np.sum(poly[:-1, 0] * poly[1:, 1] - poly[1:, 0] * poly[:-1, 1]))
+
+
+def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.ndarray]:
+    """Visible part of the latitude belt ``south``..``north`` (degrees) of a unit globe, as 2D polygons.
+
+    Each edge is a latitude or an array of ``n`` latitudes at longitudes ``linspace(-180, 180, n, endpoint=False)``.
+
+    Each polygon is closed (first point repeated) and lies in the unit disc. The result has 0, 1 or
+    more polygons. Edges are the visible arcs of the two latitude circles, joined by arcs of the
+    limb that lie inside the belt; an edge seen whole (pole-on) is a loop, and a loop whose far
+    side is the belt becomes a hole, bridged into the first polygon.
+    """
+    pole = rotation[:, 2]  # the north pole in the view frame
+
+    t = np.linspace(-np.pi, np.pi, n, endpoint=False)
+    south, north = (np.broadcast_to(np.asarray(e, float), t.shape) for e in (south, north))
+
+    def in_belt(v: np.ndarray) -> bool:
+        x, y, z = v @ rotation  # body frame
+        lon, lat = np.degrees(np.arctan2(y, x)), np.degrees(np.arcsin(np.clip(z, -1.0, 1.0)))
+        return (
+            np.interp(lon, np.degrees(t), south, period=360) <= lat <= np.interp(lon, np.degrees(t), north, period=360)
+        )
+
+    pieces: list[np.ndarray] = []
+    outers: list[np.ndarray] = []
+    holes: list[np.ndarray] = []
+    for lat, is_south in ((south, True), (north, False)):
+        if np.all(np.abs(lat) >= 90):
+            continue
+        pts = lat_lon_to_view(np.radians(lat), t, rotation)
+        if np.all(pts[:, 2] >= 0):
+            # Seen whole: its inside holds the visible pole, so the belt is inside iff that pole is on the belt's side.
+            (outers if (pole[2] > 0) == is_south else holes).append(np.vstack([pts[:, :2], pts[:1, :2]]))
+            continue
+        pts = np.roll(pts, -int(np.argmax(pts[:, 2] < 0)), axis=0)  # start hidden, so no run wraps the seam
+        for run in visible_runs(np.vstack([pts, pts[:1]])):
+            run = run[:, :2].copy()
+            run[[0, -1]] /= np.linalg.norm(run[[0, -1]], axis=1, keepdims=True)  # end exactly on the limb
+            pieces.append(run)
+    # Ends of the pieces, in angle order round the limb; the limb arc between neighbours is kept if in the belt.
+    ends = np.array([p[i] for p in pieces for i in (0, -1)]).reshape(-1, 2)
+    ang = np.arctan2(ends[:, 1], ends[:, 0])
+    order = np.argsort(ang)
+    joined: dict[int, tuple[int, np.ndarray]] = {}
+    for a, b in zip(order, np.roll(order, -1), strict=True):
+        span = (ang[b] - ang[a]) % (2 * np.pi)
+        mid = ang[a] + span / 2
+        if in_belt(np.array([np.cos(mid), np.sin(mid), 0.0])):
+            arc = ang[a] + np.linspace(0.0, span, 91)
+            joined[a] = (b, np.column_stack([np.cos(arc), np.sin(arc)]))
+            joined[b] = (a, np.column_stack([np.cos(arc[::-1]), np.sin(arc[::-1])]))
+    polys, used = [], set()
+    for first in range(len(pieces)):
+        if first in used:
+            continue
+        parts, e = [], 2 * first
+        while e // 2 not in used:
+            used.add(e // 2)
+            parts.append(pieces[e // 2] if e % 2 == 0 else pieces[e // 2][::-1])
+            if (e ^ 1) not in joined:
+                break
+            e, arc = joined[e ^ 1][0], joined[e ^ 1][1]
+            parts.append(arc)
+        poly = np.vstack(parts)
+        polys.append(np.vstack([poly, poly[:1]]))
+    polys += outers
+    if not polys and (holes or in_belt(np.array([0.0, 0.0, 1.0]))):
+        a = np.linspace(-np.pi, np.pi, 361)
+        polys = [np.column_stack([np.cos(a), np.sin(a)])]
+    for hole in holes:
+        if polys:
+            if _signed_area(hole) * _signed_area(polys[0]) > 0:
+                hole = hole[::-1]
+            polys[0] = np.vstack([polys[0][:1], hole, polys[0]])
+    return polys
