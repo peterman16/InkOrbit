@@ -10,7 +10,7 @@ import numpy as np
 
 from . import geometry
 from .bodies import Body, get_body
-from .maps import coastlines, small_circle
+from .maps import _unpack, coastlines, small_circle
 
 # USGS Gazetteer features are rings (centre and diameter), by kind: 0 crater, 1 mare, 2 mons, 3 planitia,
 # 4 terra, 5 regio. Craters and mountains stay outlines; the broad kinds are areas, which draw stipples them.
@@ -62,12 +62,20 @@ def _great_red_spot() -> np.ndarray:
     return np.column_stack([7 * np.cos(t), -23 + 3 * np.sin(t)])
 
 
+def _surface_data(body: Body) -> dict[str, np.ndarray]:
+    """Arrays of ``body``'s bundled surface file; empty if it has none."""
+    path = resources.files("inkorbit").joinpath(f"data/{body.name.lower()}_surface.npz")
+    if not path.is_file():
+        return {}
+    with path.open("rb") as f:
+        return dict(np.load(f))
+
+
 @lru_cache(maxsize=16)
 def _caps(body: Body, kinds: tuple[int, ...], fraction: tuple[float, float]) -> list[tuple[float, float, float]]:
     """(lat, lon, angular radius) in degrees of the largest gazetteer features of these kinds and sizes."""
-    with resources.files("inkorbit").joinpath(f"data/{body.name.lower()}_surface.npz").open("rb") as f:
-        data = np.load(f)
-        lat, lon, diameter, kind = (data[k].astype(float) for k in ("lat", "lon", "diameter_km", "kind"))
+    data = _surface_data(body)
+    lat, lon, diameter, kind = (data[k].astype(float) for k in ("lat", "lon", "diameter_km", "kind"))
     size = diameter / (2 * body.radius_km)
     keep = np.argsort(-diameter)
     keep = keep[np.isin(kind[keep], kinds) & (size[keep] >= fraction[0]) & (size[keep] <= fraction[1])][:_MAX_RINGS]
@@ -114,6 +122,23 @@ def shadow(lat: float, lon: float, r: float, mons: bool = False) -> np.ndarray:
     y = r * np.concatenate([y, y[::-1]])
     # local tangent offsets (x east, y north) as bearing and distance
     return np.column_stack(geometry.destination(lat, lon, np.degrees(np.arctan2(x, y)), np.hypot(x, y))[::-1])
+
+
+@lru_cache(maxsize=16)
+def regions(body: str | Body) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Dark regions of ``body`` as closed (N, 2) rings of (longitude, latitude): (base rings, core rings).
+
+    Pre-generalised outlines of the maria (Moon) or lowland plains (Mercury, Venus) to fill; the core rings are
+    the darkest heart of each region. Rings that meet the antimeridian or a pole run along it. Empty if none.
+    """
+    data = _surface_data(get_body(body))
+    if "region_points" not in data:
+        return [], []
+    rings = _unpack(data["region_points"], data["region_offsets"])
+    level = data["region_level"]
+    return [r for r, lv in zip(rings, level, strict=True) if lv == 0], [
+        r for r, lv in zip(rings, level, strict=True) if lv == 1
+    ]
 
 
 def features(body: str | Body) -> list[np.ndarray]:
