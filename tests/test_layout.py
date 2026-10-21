@@ -66,3 +66,10 @@ def test_stipple_does_not_depend_on_float_noise():
         scene.fill(poly, "stipple")
         dots.append(next(i for i in ink.layout(scene).items if isinstance(i, Dots)).points)
     assert np.allclose(dots[0], dots[1], atol=1e-9)
+
+
+def test_paper_fill_resolves_to_paper_solid():
+    scene = ink.Scene()
+    scene.fill([[0, 0], [5, 0], [5, 5], [0, 5]], "paper")
+    scene.fill([[0, 0], [5, 0], [5, 5]], "solid")
+    assert [(type(i), i.paper) for i in ink.layout(scene).items] == [(Solid, True), (Solid, False)]

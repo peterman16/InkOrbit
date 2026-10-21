@@ -331,8 +331,8 @@ def _resolve(item, d: Drawing) -> None:
         d.items.append(Stroke(pts, pen.width_mm, pen.dash_mm, item.role))
     elif isinstance(item, Fill):
         poly = d.to_page(item.polygon)
-        if item.pattern == "solid":
-            d.items.append(Solid(poly))
+        if item.pattern in ("solid", "paper"):
+            d.items.append(Solid(poly, paper=item.pattern == "paper"))
         elif item.pattern == "stipple":
             dots = patterns.stipple(poly, item.spacing_mm or style.stipple_spacing_mm, seed=item.seed or 0)
             if len(dots):

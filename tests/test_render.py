@@ -53,3 +53,18 @@ def test_to_array_matches_page_and_inks_strokes():
     assert tuple(arr[0, 0]) == (255, 255, 255, 255)  # blank corner is paper
     x, y = (fig.drawing.to_page(np.array([5.0, 0.0])) / 25.4 * 100).astype(int)
     assert arr[arr.shape[0] - 1 - y, x, 0] < 40  # on the stroke
+
+
+def test_paper_solid_blanks_earlier_ink():
+    scene = ink.Scene()
+    scene.fill([[0, -2], [10, -2], [10, 2], [0, 2]], "solid")
+    scene.fill([[4, -1], [6, -1], [6, 1], [4, 1]], "paper")
+    fig = scene.render()
+    arr = fig.to_array(dpi=100)
+
+    def pixel(x_data):
+        x, y = (fig.drawing.to_page(np.array([x_data, 0.0])) / 25.4 * 100).astype(int)
+        return tuple(arr[arr.shape[0] - 1 - y, x])
+
+    assert pixel(2.0)[0] < 40  # ink away from the patch
+    assert pixel(5.0) == (255, 255, 255, 255)  # knocked out to the page colour

@@ -21,7 +21,7 @@ ArrayLike2 = Sequence[float] | np.ndarray
 HAlign = Literal["left", "center", "right"]
 VAlign = Literal["baseline", "bottom", "center", "top"]
 MarkerKind = Literal["dot", "open", "star", "cross"]
-Pattern = Literal["stipple", "hatch", "solid"]
+Pattern = Literal["stipple", "hatch", "solid", "paper"]
 Direction = Literal["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 
 
