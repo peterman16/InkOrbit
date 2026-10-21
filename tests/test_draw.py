@@ -223,3 +223,19 @@ def test_the_filter_keeps_the_large_features():
 
     # The Moon's maria and basins: some ring spans over 1000 km (33 deg of latitude on a 1737 km radius).
     assert max(np.ptp(r[:, 1]) for r in surfaces.features("moon")) > 0.9 * np.degrees(1000 / 1737.4)
+
+
+def test_moon_areas_are_stipple_polygons_inside_the_disc():
+    from inkorbit import surfaces
+
+    caps = surfaces.areas("moon")
+    assert caps and not surfaces.areas("neptune")
+    polys = [p for cap in caps for p in geo.cap_polygons(geo.view_rotation(0.0), *cap)]
+    assert polys and all(np.all(np.hypot(*p.T) <= 1 + 1e-9) for p in polys)
+    # Splitting the kinds leaves plenty of crater and mountain outlines.
+    assert len(surfaces.features("moon")) > 50
+
+
+def test_cap_polygon_of_a_centred_cap_is_a_disc_of_the_right_size():
+    (poly,) = geo.cap_polygons(geo.view_rotation(0.0), 0.0, 0.0, 30.0)  # centred on the viewer: radius sin 30
+    assert np.hypot(*poly.T).max() == pytest.approx(0.5, abs=1e-3)

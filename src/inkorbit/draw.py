@@ -131,6 +131,10 @@ def body(
         for south, north in surfaces.belts(body):
             for poly in geo.belt_polygons(rotation, surfaces.edge(body, south, lon), surfaces.edge(body, north, lon)):
                 scene.fill(c + radius * poly, "stipple")
+        for cap in surfaces.areas(body):
+            for poly in geo.cap_polygons(rotation, *cap):
+                scene.fill(c + radius * poly, "stipple")
+                scene.line(c + radius * poly, st.SURFACE)
     if grid_step:
         step = np.degrees(grid_step)
         for line in geo.graticule(rotation, step, step):

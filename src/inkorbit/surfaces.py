@@ -11,10 +11,12 @@ import numpy as np
 from .bodies import Body, get_body
 from .maps import coastlines, small_circle
 
-# USGS Gazetteer features are drawn as rings (centre and diameter). Thousands of rings turn to mud, so keep
-# only those whose diameter is between these fractions of the body's, and the largest _MAX_RINGS of them.
-# Bigger than half the body, a ring is a circle across the disc and no longer reads as a place.
-_MIN_FRACTION, _MAX_FRACTION = 0.03, 0.5
+# USGS Gazetteer features are rings (centre and diameter), by kind: 0 crater, 1 mare, 2 mons, 3 planitia,
+# 4 terra, 5 regio. Craters and mountains stay outlines; the broad kinds are areas, which draw stipples them.
+# Thousands of rings turn to mud, so keep those whose diameter is between these fractions of the body's,
+# and the largest _MAX_RINGS. Bigger than half (lines) or 60% (areas), a ring is a circle across the disc.
+_LINE_KINDS, _AREA_KINDS = (0, 2), (1, 3, 4, 5)
+_LINE_FRACTION, _AREA_FRACTION = (0.03, 0.5), (0.03, 0.6)
 _MAX_RINGS = 100
 _GAZETTEER = ("moon", "mercury", "venus", "mars")
 
@@ -57,16 +59,22 @@ def _great_red_spot() -> np.ndarray:
     return np.column_stack([7 * np.cos(t), -23 + 3 * np.sin(t)])
 
 
-@lru_cache(maxsize=8)
-def _rings(body: Body) -> list[np.ndarray]:
+@lru_cache(maxsize=16)
+def _caps(body: Body, kinds: tuple[int, ...], fraction: tuple[float, float]) -> list[tuple[float, float, float]]:
+    """(lat, lon, angular radius) in degrees of the largest gazetteer features of these kinds and sizes."""
     with resources.files("inkorbit").joinpath(f"data/{body.name.lower()}_surface.npz").open("rb") as f:
         data = np.load(f)
-        lat, lon, diameter = (data[k].astype(float) for k in ("lat", "lon", "diameter_km"))
-    fraction = diameter / (2 * body.radius_km)
-    big = np.argsort(-diameter)
-    big = big[(fraction[big] >= _MIN_FRACTION) & (fraction[big] <= _MAX_FRACTION)][:_MAX_RINGS]
-    radius = np.degrees(diameter[big] / 2 / body.radius_km)
-    return [run for k, r in zip(big, radius, strict=True) for run in small_circle(lat[k], lon[k], r)]
+        lat, lon, diameter, kind = (data[k].astype(float) for k in ("lat", "lon", "diameter_km", "kind"))
+    size = diameter / (2 * body.radius_km)
+    keep = np.argsort(-diameter)
+    keep = keep[np.isin(kind[keep], kinds) & (size[keep] >= fraction[0]) & (size[keep] <= fraction[1])][:_MAX_RINGS]
+    return [(lat[k], lon[k], np.degrees(diameter[k] / 2 / body.radius_km)) for k in keep]
+
+
+def areas(body: str | Body) -> list[tuple[float, float, float]]:
+    """Broad surface areas (maria, plains, highlands) as (lat, lon, angular radius) caps in degrees."""
+    body = get_body(body)
+    return _caps(body, _AREA_KINDS, _AREA_FRACTION) if body.name.lower() in _GAZETTEER else []
 
 
 def features(body: str | Body) -> list[np.ndarray]:
@@ -75,7 +83,7 @@ def features(body: str | Body) -> list[np.ndarray]:
     if body.name == "Earth":
         return coastlines()
     if body.name.lower() in _GAZETTEER:
-        return _rings(body)
+        return [run for cap in _caps(body, _LINE_KINDS, _LINE_FRACTION) for run in small_circle(*cap)]
     edges = sorted({e for belt in belts(body) for e in belt if abs(e) < 90})  # belt edges, minus the poles
     lon = np.linspace(-180, 180, 361)
     bands = [np.column_stack([lon, edge(body, lat, lon)]) for lat in edges]

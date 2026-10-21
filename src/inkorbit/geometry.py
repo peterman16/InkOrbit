@@ -316,3 +316,14 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
                 hole = hole[::-1]
             polys[0] = np.vstack([polys[0][:1], hole, polys[0]])
     return polys
+
+
+def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) -> list[np.ndarray]:
+    """Visible part of the cap of angular ``radius`` about (``lat``, ``lon``), all in degrees, as 2D polygons.
+
+    The cap is a belt about its own pole, so the globe is turned to put the cap's centre at the pole.
+    """
+    la, lo = np.radians(lat), np.radians(lon)
+    centre = np.array([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
+    east = np.array([-np.sin(lo), np.cos(lo), 0.0])
+    return belt_polygons(rotation @ np.column_stack([east, np.cross(centre, east), centre]), 90 - radius, 90)
