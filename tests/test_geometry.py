@@ -162,3 +162,26 @@ def test_small_circle_unchanged():
     assert len(got) == len(expected) > 1
     for g, e in zip(got, expected, strict=True):
         assert np.allclose(g, e)
+
+
+def test_ring_arcs_tilted_halves_mirror_and_far_passes_behind_disc():
+    rot = geo.view_rotation(tilt=np.radians(20))
+    near, far = geo.ring_arcs(rot, 2.0)
+    assert near.shape == far.shape == (181, 2)
+    assert np.allclose(near[-1], far[0]) and np.allclose(far[-1], near[0])  # arcs join end to end
+    assert np.allclose(near, -far)  # opposite points of the circle
+    assert np.hypot(*far.T).min() < 1.0  # the far half runs behind the disc
+    # radius scales the arc and keeps the ordering, so outer + reversed inner makes a band
+    assert np.allclose(geo.ring_arcs(rot, 1.0)[0] * 2.0, near)
+
+
+def test_ring_arcs_pole_on_is_all_near():
+    near, far = geo.ring_arcs(geo.view_rotation(tilt=np.pi / 2), 1.5)  # pole facing the viewer: circle lies in z = 0
+    assert far.shape == (0, 2)
+    assert np.allclose(np.hypot(*near.T), 1.5) and np.allclose(near[0], near[-1])
+
+
+def test_ring_arcs_edge_on_is_a_line():
+    near, far = geo.ring_arcs(geo.view_rotation(tilt=0.0), 2.0)  # equator seen edge-on
+    assert np.allclose(near[:, 1], 0.0) and np.allclose(far[:, 1], 0.0)
+    assert np.isclose(np.abs(near[:, 0]).max(), 2.0)

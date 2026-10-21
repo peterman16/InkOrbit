@@ -32,7 +32,7 @@ all of them and imports none of them. Nothing in the core imports an adapter.
 | `labels.py` | Automatic label placement (from step 2) | render-engineer |
 | `render/` | Backends | render-engineer |
 | `scene.py` | Scene items and the `Scene` builder | shared: Architect decides changes |
-| `geometry.py` | Plane geometry: conics, arcs, rotations | orbit-engineer |
+| `geometry.py` | Plane geometry: conics, arcs, rotations; ring arcs split near/far at the view plane | orbit-engineer |
 | `elements.py` | `Elements` dataclass, frames (from step 2) | orbit-engineer |
 | `draw.py` | Primitives: orbit, body, apsides, nodes, angles, vectors (from step 2) | orbit-engineer |
 | `diagrams.py` / `plate.py` | Named diagrams built from `draw`; `Plate` | orbit-engineer |
