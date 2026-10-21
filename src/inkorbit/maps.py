@@ -11,6 +11,8 @@ from importlib import resources
 
 import numpy as np
 
+from . import geometry
+
 
 @lru_cache(maxsize=1)
 def _earth() -> dict[str, np.ndarray]:
@@ -67,8 +69,5 @@ def split_at_antimeridian(lon, lat, jump: float = 180.0) -> list[np.ndarray]:
 
 def small_circle(lat_deg: float, lon_deg: float, radius_deg: float, n: int = 121) -> list[np.ndarray]:
     """A circle of given angular radius around a point on the sphere, as map polylines."""
-    lat1, lon1, d = np.radians(lat_deg), np.radians(lon_deg), np.radians(radius_deg)
-    bearing = np.linspace(0.0, 2 * np.pi, n)
-    lat2 = np.arcsin(np.sin(lat1) * np.cos(d) + np.cos(lat1) * np.sin(d) * np.cos(bearing))
-    lon2 = lon1 + np.arctan2(np.sin(bearing) * np.sin(d) * np.cos(lat1), np.cos(d) - np.sin(lat1) * np.sin(lat2))
-    return split_at_antimeridian(np.degrees(lon2), np.degrees(lat2))
+    lat, lon = geometry.destination(lat_deg, lon_deg, np.linspace(0.0, 360.0, n), radius_deg)
+    return split_at_antimeridian(lon, lat)

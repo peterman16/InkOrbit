@@ -109,7 +109,9 @@ def body(
     globe is seen down that orbit's normal, as drawn in ``frame``, in place of
     ``tilt`` (longitude 0 is the vernal equinox). ``surface=True`` draws the
     surface features of ``body`` (a name or :class:`Body`) on the visible
-    hemisphere; it never assumes Earth.
+    hemisphere; it never assumes Earth. On the Moon, Mercury, Venus and Mars
+    that is stippled dark regions, crater rims and crater shadows; the shadows
+    assume light from the west, fixed in the body frame, and ignore ``sun``.
     """
     if surface and body is None:
         raise ValueError("surface needs body=")
@@ -131,6 +133,7 @@ def body(
         for south, north in surfaces.belts(body):
             for poly in geo.belt_polygons(rotation, surfaces.edge(body, south, lon), surfaces.edge(body, north, lon)):
                 scene.fill(c + radius * poly, "stipple")
+        _craters_and_regions(scene, c, radius, rotation, body)
     if grid_step:
         step = np.degrees(grid_step)
         for line in geo.graticule(rotation, step, step):
@@ -144,6 +147,35 @@ def body(
     if label:
         # Attach to the rim, upper right, where it reads as naming the globe.
         scene.label(label, c + radius * np.array([np.cos(np.pi / 4), np.sin(np.pi / 4)]), prefer="ne", priority=3)
+
+
+def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, body) -> None:
+    """Stippled dark regions with the floors of craters inside them left clear, crater shadows and rims."""
+    craters = surfaces.craters(body)  # largest first
+    centres = geo.lat_lon_to_view(*np.radians([[k[0] for k in craters], [k[1] for k in craters]]), np.eye(3))
+    holes: list[np.ndarray] = []
+    knocked: list[tuple[np.ndarray, float]] = []
+    for i, ((lat, lon, r, mons), centre) in enumerate(zip(craters, centres, strict=True)):
+        # Shadows are drawn about longitude 0, then turned back, so one never straddles the antimeridian.
+        shade = surfaces.shadow(lat, 0.0, r, mons)
+        for poly in geo.ring_polygons(rotation @ geo._r3(-np.radians(lon)), shade):
+            scene.fill(c + radius * poly, "stipple", spacing_mm=st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+        ring = surfaces.rim(body, i, lat, lon, r)
+        points = geo.lat_lon_to_view(np.radians(ring[:, 1]), np.radians(ring[:, 0]), np.eye(3))
+        smaller = [(cj, np.radians(k[2])) for cj, k in zip(centres, craters, strict=True) if k[2] < r]
+        view = points @ rotation.T
+        if np.all(view[:, 2] >= 0) and all(centre @ cj < np.cos(np.radians(r) + rj) for cj, rj in knocked):
+            holes.append(view[:, :2])  # a whole floor, clear of every other one: even-odd holes must not overlap
+            knocked.append((centre, np.radians(r)))
+        view[~geo.outside_caps(points, smaller), 2] = -1.0  # rims stop at smaller craters on them
+        for run in geo.visible_runs(view):
+            scene.line(c + radius * run[:, :2], st.SURFACE)
+    base, core = surfaces.regions(body)
+    for rings, spacing in ((base, st.DEFAULT_STYLE.region_stipple_mm), (core, st.DEFAULT_STYLE.region_core_stipple_mm)):
+        for ring in rings:
+            for poly in geo.ring_polygons(rotation, ring):
+                inside = [h for h in holes if geo.points_in_polygon(h, poly).all()]
+                scene.fill(c + radius * geo.with_holes(poly, inside), "stipple", spacing_mm=spacing)
 
 
 def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None, center=(0.0, 0.0)) -> None:
