@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import zlib
+from functools import lru_cache
+from importlib import resources
 
 import numpy as np
 
 from .bodies import Body, get_body
-from .maps import coastlines
+from .maps import coastlines, small_circle
+
+# USGS Gazetteer features are drawn as rings (centre and diameter). Thousands of rings turn to mud, so keep
+# only those whose diameter is between these fractions of the body's, and the largest _MAX_RINGS of them.
+# Bigger than half the body, a ring is a circle across the disc and no longer reads as a place.
+_MIN_FRACTION, _MAX_FRACTION = 0.03, 0.5
+_MAX_RINGS = 100
+_GAZETTEER = ("moon", "mercury", "venus", "mars")
 
 # Dark cloud belts as (south, north) planetographic latitudes in degrees. Stylised and approximate, not data.
 _BELTS = {
@@ -48,11 +57,25 @@ def _great_red_spot() -> np.ndarray:
     return np.column_stack([7 * np.cos(t), -23 + 3 * np.sin(t)])
 
 
+@lru_cache(maxsize=8)
+def _rings(body: Body) -> list[np.ndarray]:
+    with resources.files("inkorbit").joinpath(f"data/{body.name.lower()}_surface.npz").open("rb") as f:
+        data = np.load(f)
+        lat, lon, diameter = (data[k].astype(float) for k in ("lat", "lon", "diameter_km"))
+    fraction = diameter / (2 * body.radius_km)
+    big = np.argsort(-diameter)
+    big = big[(fraction[big] >= _MIN_FRACTION) & (fraction[big] <= _MAX_FRACTION)][:_MAX_RINGS]
+    radius = np.degrees(diameter[big] / 2 / body.radius_km)
+    return [run for k, r in zip(big, radius, strict=True) for run in small_circle(lat[k], lon[k], r)]
+
+
 def features(body: str | Body) -> list[np.ndarray]:
     """Surface polylines of ``body`` as (N, 2) arrays of (longitude, latitude); empty if none are known."""
     body = get_body(body)
     if body.name == "Earth":
         return coastlines()
+    if body.name.lower() in _GAZETTEER:
+        return _rings(body)
     edges = sorted({e for belt in belts(body) for e in belt if abs(e) < 90})  # belt edges, minus the poles
     lon = np.linspace(-180, 180, 361)
     bands = [np.column_stack([lon, edge(body, lat, lon)]) for lat in edges]

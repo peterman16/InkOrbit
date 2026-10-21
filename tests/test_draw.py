@@ -127,11 +127,11 @@ def _surface_lines(scene):
 
 
 def test_surface_is_drawn_only_for_bodies_with_features():
-    earth, moon = ink.Scene(), ink.Scene()
+    earth, neptune = ink.Scene(), ink.Scene()
     draw.body(earth, 1.0, body="earth", surface=True)
-    draw.body(moon, 1.0, body="moon", surface=True)
+    draw.body(neptune, 1.0, body="neptune", surface=True)
     assert _surface_lines(earth)
-    assert not _surface_lines(moon)  # never falls back to Earth's coastlines
+    assert not _surface_lines(neptune)  # no features for Neptune: never falls back to Earth's coastlines
 
 
 def test_surface_needs_a_body():
@@ -204,3 +204,22 @@ def test_belt_edges_are_deterministic_wavy_and_clear_of_the_red_spot():
     half = 3 * np.sqrt(1 - (lon[spot] / 7) ** 2)  # the spot's half-height, centred at -23
     assert np.all(surfaces.edge("jupiter", -26, lon)[spot] <= -23 - half)
     assert np.all(surfaces.edge("jupiter", -20, lon)[spot] >= -23 + half)
+
+
+@pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
+def test_gazetteer_bodies_have_closed_rings_in_range(name):
+    from inkorbit import surfaces
+
+    rings = surfaces.features(name)
+    assert 20 < len(rings) < 250  # filtered, not thousands
+    for ring in rings:
+        assert np.all(np.abs(ring[:, 0]) <= 180) and np.all(np.abs(ring[:, 1]) <= 90)
+        # A ring is closed unless the map's edge cut it, and then a piece ends on the edge.
+        assert np.allclose(ring[0], ring[-1]) or 180 in (abs(ring[0, 0]), abs(ring[-1, 0]))
+
+
+def test_the_filter_keeps_the_large_features():
+    from inkorbit import surfaces
+
+    # The Moon's maria and basins: some ring spans over 1000 km (33 deg of latitude on a 1737 km radius).
+    assert max(np.ptp(r[:, 1]) for r in surfaces.features("moon")) > 0.9 * np.degrees(1000 / 1737.4)
