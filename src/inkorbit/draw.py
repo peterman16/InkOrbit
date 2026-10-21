@@ -112,10 +112,22 @@ def body(
     hemisphere; it never assumes Earth. On the Moon, Mercury, Venus and Mars
     that is stippled dark regions, crater rims and crater shadows; the shadows
     assume light from the west, fixed in the body frame, and ignore ``sun``.
+    Saturn's rings also come with ``surface=True``: stippled bands in the
+    equatorial plane, tilting with the globe, the near half in front of it and
+    the far half behind. They cast and receive no shadows.
     """
     if surface and body is None:
         raise ValueError("surface needs body=")
     c = np.asarray(center, dtype=float)
+    if orbit is None:
+        rotation = geo.view_rotation(tilt, spin)
+    else:
+        # A turn about the pole comes first, so it adds to the node: R3(raan) R3(spin).
+        rotation = geo.orbit_view_rotation(orbit.i, orbit.raan + spin, orbit.argp, orbit._rotation(frame))
+    rings = surfaces.rings(body) if surface else ()
+    if rings:
+        _ring_half(scene, c, radius, rotation, rings, near=False)
+        scene.fill(geo.circle(tuple(c), radius), "paper")
     if sun is not None:
         direction = np.array(
             [np.cos(sun_elevation) * np.cos(sun), np.cos(sun_elevation) * np.sin(sun), np.sin(sun_elevation)]
@@ -123,11 +135,6 @@ def body(
         night = geo.night_side(direction)
         if night is not None:
             scene.fill(c + radius * night, "stipple")
-    if orbit is None:
-        rotation = geo.view_rotation(tilt, spin)
-    else:
-        # A turn about the pole comes first, so it adds to the node: R3(raan) R3(spin).
-        rotation = geo.orbit_view_rotation(orbit.i, orbit.raan + spin, orbit.argp, orbit._rotation(frame))
     if surface:
         lon = np.linspace(-180, 180, 361, endpoint=False)
         for south, north in surfaces.belts(body):
@@ -144,9 +151,32 @@ def body(
             for run in geo.visible_runs(view):
                 scene.line(c + radius * run[:, :2], st.SURFACE)
     scene.line(geo.circle(tuple(c), radius), st.OUTLINE)
+    if rings:
+        _ring_half(scene, c, radius, rotation, rings, near=True)
     if label:
-        # Attach to the rim, upper right, where it reads as naming the globe.
-        scene.label(label, c + radius * np.array([np.cos(np.pi / 4), np.sin(np.pi / 4)]), prefer="ne", priority=3)
+        # Attach to the rim, upper right, where it reads as naming the globe; with rings, to their outer edge.
+        at = c + radius * np.array([np.cos(np.pi / 4), np.sin(np.pi / 4)])
+        if rings:
+            edge = c + radius * np.vstack(geo.ring_arcs(rotation, max(outer for _, outer, _ in rings)))
+            at = edge[np.argmax(edge @ (1.0, 1.0))]
+        scene.label(label, at, prefer="ne", priority=3)
+
+
+def _ring_half(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, rings, near: bool) -> None:
+    """Near or far half of each ring band: stipple in its tone and edge arcs; near bands first blank what is behind."""
+    spacing = dict(zip(("light", "medium", "dense"), st.DEFAULT_STYLE.ring_stipple_mm, strict=True))
+    bands = []
+    for inner, outer, tone in rings:
+        arcs = [c + radius * geo.ring_arcs(rotation, r)[0 if near else 1] for r in (inner, outer)]
+        if len(arcs[0]):  # pole-on there is no far half
+            bands.append((arcs, np.vstack([arcs[1], arcs[0][::-1]]), spacing[tone]))
+    if near:
+        for _, band, _ in bands:  # all knock-outs first, so one band's paper never cuts a neighbour's edge
+            scene.fill(band, "paper")
+    for arcs, band, step in bands:
+        scene.fill(band, "stipple", spacing_mm=step)
+        for arc in arcs:
+            scene.line(arc, st.SURFACE)
 
 
 def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, body) -> None:

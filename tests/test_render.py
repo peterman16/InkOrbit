@@ -78,3 +78,17 @@ def test_paper_solid_covers_earlier_stroke():
     arr = fig.to_array(dpi=100)
     x, y = (fig.drawing.to_page(np.array([5.0, 0.0])) / 25.4 * 100).astype(int)
     assert tuple(arr[arr.shape[0] - 1 - y, x]) == (255, 255, 255, 255)
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_saturn_rings():
+    scene = ink.Scene()
+    ink.draw.body(scene, 1.0, body="saturn", surface=True, tilt=np.radians(20), spin=np.radians(30), label="SATURN")
+    return scene.render().figure
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_saturn_orbits_diagram():
+    moons = [ink.Elements(a=a) for a in (185_539, 237_948, 294_619)]  # Mimas, Enceladus, Tethys, km
+    names = ["Mimas", "Enceladus", "Tethys"]
+    return ink.diagram("orbits", *moons, body="saturn", surface=True, names=names).render().figure
