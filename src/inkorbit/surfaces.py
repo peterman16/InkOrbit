@@ -19,6 +19,7 @@ _MAX_RINGS = 100
 _CRATER_FRACTION = (0.02, 0.15)
 _RIM_HARMONICS, _RIM_AMPLITUDE = (2, 3, 5, 7), (0.01, 0.035)  # of the radius: slightly polygonal, hand-drawn rims
 _GAZETTEER = ("moon", "mercury", "venus", "mars")
+_MONS_BODIES = ("mars", "venus")  # volcano domes; on the Moon and Mercury "mons" rings are mostly mountain ranges
 
 # Dark cloud belts as (south, north) planetographic latitudes in degrees. Stylised and approximate, not data.
 _BELTS = {
@@ -80,11 +81,16 @@ def _caps(body: Body, kinds: tuple[int, ...], fraction: tuple[float, float]) -> 
 
 
 def craters(body: str | Body) -> list[tuple[float, float, float, bool]]:
-    """Craters and mountains as (lat, lon, angular radius, is_mons) in degrees, largest first; empty if none."""
+    """Craters and mountains as (lat, lon, angular radius, is_mons) in degrees, largest first; empty if none.
+
+    Mountains only on Mars and Venus: elsewhere the gazetteer's mons rings are ranges, which a ring misdraws.
+    """
     body = get_body(body)
-    if body.name.lower() not in _GAZETTEER:
+    name = body.name.lower()
+    if name not in _GAZETTEER:
         return []
-    found = [(*c, mons) for mons in (False, True) for c in _caps(body, (2 if mons else 0,), _CRATER_FRACTION)]
+    kinds = (False, True) if name in _MONS_BODIES else (False,)
+    found = [(*c, mons) for mons in kinds for c in _caps(body, (2 if mons else 0,), _CRATER_FRACTION)]
     return sorted(found, key=lambda c: -c[2])[:_MAX_RINGS]
 
 

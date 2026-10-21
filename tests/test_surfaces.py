@@ -20,6 +20,11 @@ def test_craters_only_for_bodies_with_data():
     assert surfaces.craters("jupiter") == []
 
 
+def test_mountains_only_on_mars_and_venus():
+    for name, has_mons in (("moon", False), ("mercury", False), ("venus", True), ("mars", True)):
+        assert any(c[3] for c in surfaces.craters(name)) == has_mons
+
+
 def test_rim_is_seeded_and_stays_near_the_circle():
     ring = surfaces.rim("moon", 3, 10.0, 20.0, 5.0)
     assert np.array_equal(ring, surfaces.rim("moon", 3, 10.0, 20.0, 5.0))
