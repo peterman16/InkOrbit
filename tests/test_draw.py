@@ -206,36 +206,41 @@ def test_belt_edges_are_deterministic_wavy_and_clear_of_the_red_spot():
     assert np.all(surfaces.edge("jupiter", -20, lon)[spot] >= -23 + half)
 
 
+def _fills(name, spacing, spin=0.0):
+    s = ink.Scene()
+    draw.body(s, 1.0, body=name, surface=True, sun=None, spin=spin)
+    return [i for i in s.items if isinstance(i, Fill) and i.spacing_mm == spacing]
+
+
+def test_moon_regions_are_stippled_in_two_tones_and_mars_has_none():
+    for spacing in (st.DEFAULT_STYLE.region_stipple_mm, st.DEFAULT_STYLE.region_core_stipple_mm):
+        assert _fills("moon", spacing)
+        assert not _fills("mars", spacing)  # no region data for Mars
+
+
 @pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
-def test_gazetteer_bodies_have_closed_rings_in_range(name):
-    from inkorbit import surfaces
-
-    rings = surfaces.features(name)
-    assert 20 < len(rings) < 250  # filtered, not thousands
-    for ring in rings:
-        assert np.all(np.abs(ring[:, 0]) <= 180) and np.all(np.abs(ring[:, 1]) <= 90)
-        # A ring is closed unless the map's edge cut it, and then a piece ends on the edge.
-        assert np.allclose(ring[0], ring[-1]) or 180 in (abs(ring[0, 0]), abs(ring[-1, 0]))
+def test_rocky_bodies_get_crater_shadows_and_rims(name):
+    assert _fills(name, st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+    s = ink.Scene()
+    draw.body(s, 1.0, body=name, surface=True)
+    assert _surface_lines(s)
 
 
-def test_the_filter_keeps_the_large_features():
-    from inkorbit import surfaces
-
-    # The Moon's maria and basins: some ring spans over 1000 km (33 deg of latitude on a 1737 km radius).
-    assert max(np.ptp(r[:, 1]) for r in surfaces.features("moon")) > 0.9 * np.degrees(1000 / 1737.4)
-
-
-def test_moon_areas_are_stipple_polygons_inside_the_disc():
-    from inkorbit import surfaces
-
-    caps = surfaces.areas("moon")
-    assert caps and not surfaces.areas("neptune")
-    polys = [p for cap in caps for p in geo.cap_polygons(geo.view_rotation(0.0), *cap)]
-    assert polys and all(np.all(np.hypot(*p.T) <= 1 + 1e-9) for p in polys)
-    # Splitting the kinds leaves plenty of crater and mountain outlines.
-    assert len(surfaces.features("moon")) > 50
+def test_crater_shadows_stay_small_across_the_antimeridian():
+    # Facing longitude 180: a shadow ring crossing it must not become a band around the globe.
+    shadows = _fills("moon", st.DEFAULT_STYLE.crater_shadow_stipple_mm, spin=np.pi)
+    assert shadows and max(_area(f.polygon) for f in shadows) < 0.05
 
 
-def test_cap_polygon_of_a_centred_cap_is_a_disc_of_the_right_size():
-    (poly,) = geo.cap_polygons(geo.view_rotation(0.0), 0.0, 0.0, 30.0)  # centred on the viewer: radius sin 30
-    assert np.hypot(*poly.T).max() == pytest.approx(0.5, abs=1e-3)
+def test_some_crater_floors_are_cut_out_of_the_maria():
+    maria = _fills("moon", st.DEFAULT_STYLE.region_stipple_mm)
+    assert any(len(f.polygon) > 1 + len(np.unique(f.polygon, axis=0)) for f in maria)  # a hole repeats the start
+
+
+def test_rocky_globe_renders_the_same_twice():
+    def png():
+        s = ink.Scene()
+        draw.body(s, 1.0, body="moon", surface=True)
+        return s.render().to_array(dpi=72)
+
+    assert np.array_equal(png(), png())

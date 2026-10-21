@@ -390,17 +390,6 @@ def outside_caps(points3: np.ndarray, caps: list[tuple[np.ndarray, float]]) -> n
     return mask
 
 
-def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) -> list[np.ndarray]:
-    """Visible part of the cap of angular ``radius`` about (``lat``, ``lon``), all in degrees, as 2D polygons.
-
-    The cap is a belt about its own pole, so the globe is turned to put the cap's centre at the pole.
-    """
-    la, lo = np.radians(lat), np.radians(lon)
-    centre = np.array([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
-    east = np.array([-np.sin(lo), np.cos(lo), 0.0])
-    return belt_polygons(rotation @ np.column_stack([east, np.cross(centre, east), centre]), 90 - radius, 90)
-
-
 def destination(lat, lon, bearing, dist):
     """Point reached from (lat, lon) along an initial bearing for an angular distance on the unit sphere.
 

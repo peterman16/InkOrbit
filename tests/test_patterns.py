@@ -20,6 +20,12 @@ def test_stipple_is_deterministic():
     assert np.array_equal(patterns.stipple(SQUARE, 0.5, seed=3), patterns.stipple(SQUARE, 0.5, seed=3))
 
 
+def test_small_fill_is_stippled_finer_but_never_below_the_floor():
+    tiny = SQUARE * 0.06  # 0.6 mm square: about one dot at 0.55 mm
+    assert len(patterns.stipple(tiny, 0.55)) >= 5
+    assert len(patterns.stipple(SQUARE * 0.01, 0.55)) < 5  # 0.1 mm: too small even at 0.15 mm, stays sparse
+
+
 def test_hatch_segments_span_the_square():
     segments = patterns.hatch(SQUARE, 1.0, 0.0)
     assert len(segments) == 10

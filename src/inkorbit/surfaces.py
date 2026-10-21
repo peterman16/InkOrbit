@@ -10,14 +10,11 @@ import numpy as np
 
 from . import geometry
 from .bodies import Body, get_body
-from .maps import _unpack, coastlines, small_circle
+from .maps import _unpack, coastlines
 
 # USGS Gazetteer features are rings (centre and diameter), by kind: 0 crater, 1 mare, 2 mons, 3 planitia,
-# 4 terra, 5 regio. Craters and mountains stay outlines; the broad kinds are areas, which draw stipples them.
-# Thousands of rings turn to mud, so keep those whose diameter is between these fractions of the body's,
-# and the largest _MAX_RINGS. Bigger than half (lines) or 60% (areas), a ring is a circle across the disc.
-_LINE_KINDS, _AREA_KINDS = (0, 2), (1, 3, 4, 5)
-_LINE_FRACTION, _AREA_FRACTION = (0.03, 0.5), (0.03, 0.6)
+# 4 terra, 5 regio. Only craters and mountains are drawn (dark regions come from regions()). Thousands of rings
+# turn to mud, so keep those whose radius is between these fractions of the body's, and the largest _MAX_RINGS.
 _MAX_RINGS = 100
 _CRATER_FRACTION = (0.02, 0.15)
 _RIM_HARMONICS, _RIM_AMPLITUDE = (2, 3, 5, 7), (0.01, 0.035)  # of the radius: slightly polygonal, hand-drawn rims
@@ -82,12 +79,6 @@ def _caps(body: Body, kinds: tuple[int, ...], fraction: tuple[float, float]) -> 
     return [(lat[k], lon[k], np.degrees(diameter[k] / 2 / body.radius_km)) for k in keep]
 
 
-def areas(body: str | Body) -> list[tuple[float, float, float]]:
-    """Broad surface areas (maria, plains, highlands) as (lat, lon, angular radius) caps in degrees."""
-    body = get_body(body)
-    return _caps(body, _AREA_KINDS, _AREA_FRACTION) if body.name.lower() in _GAZETTEER else []
-
-
 def craters(body: str | Body) -> list[tuple[float, float, float, bool]]:
     """Craters and mountains as (lat, lon, angular radius, is_mons) in degrees, largest first; empty if none."""
     body = get_body(body)
@@ -142,12 +133,13 @@ def regions(body: str | Body) -> tuple[list[np.ndarray], list[np.ndarray]]:
 
 
 def features(body: str | Body) -> list[np.ndarray]:
-    """Surface polylines of ``body`` as (N, 2) arrays of (longitude, latitude); empty if none are known."""
+    """Surface polylines of ``body`` as (N, 2) arrays of (longitude, latitude): Earth's coastlines, gas-giant bands.
+
+    Empty for other bodies; the rocky ones are drawn from :func:`craters`, :func:`rim` and :func:`regions`.
+    """
     body = get_body(body)
     if body.name == "Earth":
         return coastlines()
-    if body.name.lower() in _GAZETTEER:
-        return [run for cap in _caps(body, _LINE_KINDS, _LINE_FRACTION) for run in small_circle(*cap)]
     edges = sorted({e for belt in belts(body) for e in belt if abs(e) < 90})  # belt edges, minus the poles
     lon = np.linspace(-180, 180, 361)
     bands = [np.column_stack([lon, edge(body, lat, lon)]) for lat in edges]
