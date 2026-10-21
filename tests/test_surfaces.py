@@ -93,3 +93,14 @@ def test_equal_diameters_keep_data_order():
         if a[2] == b[2]
     ]
     assert ties and all(i < j for i, j in ties)
+
+
+def test_saturn_rings_are_ordered_with_the_cassini_gap():
+    c, b, a = surfaces.rings("saturn")
+    assert all(inner < outer for inner, outer, _ in (c, b, a))
+    assert c[1] <= b[0] and b[1] < a[0]  # C and B touch; the Cassini Division separates B and A
+    assert a[0] - b[1] > 0.05
+
+
+def test_other_bodies_have_no_rings():
+    assert surfaces.rings("jupiter") == () and surfaces.rings("earth") == ()
