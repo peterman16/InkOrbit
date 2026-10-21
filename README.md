@@ -148,6 +148,10 @@ a cell (a printed plate at 300 dpi, so its thin pens survive).
 ## Credits
 
 Map data: made with [Natural Earth](https://www.naturalearthdata.com/) (public domain).
+Craters, mountains and plains on the Moon, Mercury, Venus and Mars come from the
+[Gazetteer of Planetary Nomenclature](https://planetarynames.wr.usgs.gov/) (IAU/USGS, public domain).
+The Moon's maria are generalised from the Unified Geologic Map of the Moon, 1:5M (2020),
+by Fortezzo, Spudis and Harrel, USGS Astrogeology (CC0).
 Lettering uses the Hershey vector fonts, created by Dr. A. V. Hershey at the U.S.
 Naval Weapons Laboratory, via the MIT-licensed
 [Hershey-Fonts](https://github.com/apshu/HersheyFonts) package.
