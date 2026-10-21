@@ -79,3 +79,17 @@ def test_the_moons_maria_are_where_they_are():
 @pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
 def test_surface_files_stay_small(name):
     assert resources.files("inkorbit").joinpath(f"data/{name}_surface.npz").stat().st_size < 60_000
+
+
+def test_equal_diameters_keep_data_order():
+    # numpy's default argsort is unstable, so tied craters swapped places (and rim seeds) between numpy versions
+    body = surfaces.get_body("mercury")
+    data = surfaces._surface_data(body)
+    position = {(float(la), float(lo)): i for i, (la, lo) in enumerate(zip(data["lat"], data["lon"], strict=True))}
+    caps = surfaces._caps(body, (0,), (0.0, 1.0))
+    ties = [
+        (position[(float(a[0]), float(a[1]))], position[(float(b[0]), float(b[1]))])
+        for a, b in zip(caps, caps[1:], strict=False)
+        if a[2] == b[2]
+    ]
+    assert ties and all(i < j for i, j in ties)

@@ -75,7 +75,7 @@ def _caps(body: Body, kinds: tuple[int, ...], fraction: tuple[float, float]) -> 
     data = _surface_data(body)
     lat, lon, diameter, kind = (data[k].astype(float) for k in ("lat", "lon", "diameter_km", "kind"))
     size = diameter / (2 * body.radius_km)
-    keep = np.argsort(-diameter)
+    keep = np.argsort(-diameter, kind="stable")  # ties (same diameter) must not depend on the numpy version
     keep = keep[np.isin(kind[keep], kinds) & (size[keep] >= fraction[0]) & (size[keep] <= fraction[1])][:_MAX_RINGS]
     return [(lat[k], lon[k], np.degrees(diameter[k] / 2 / body.radius_km)) for k in keep]
 
