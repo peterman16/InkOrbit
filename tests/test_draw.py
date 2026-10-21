@@ -190,3 +190,17 @@ def test_belts_stipple_jupiter_but_not_neptune():
         return [i for i in s.items if isinstance(i, Fill)]
 
     assert fills("jupiter") and not fills("neptune")
+
+
+def test_belt_edges_are_deterministic_wavy_and_clear_of_the_red_spot():
+    from inkorbit import surfaces
+
+    lon = np.linspace(-180, 180, 361)
+    first, again = surfaces.edge("jupiter", 17, lon), surfaces.edge("jupiter", 17, lon)
+    assert np.array_equal(first, again) and np.ptp(first) > 0.5
+    assert np.allclose(surfaces.edge("jupiter", 90, lon), 90)  # the pole side stays put
+    assert np.ptp(surfaces.edge("saturn", 35, lon)) < np.ptp(first)
+    spot = np.abs(lon) < 7
+    half = 3 * np.sqrt(1 - (lon[spot] / 7) ** 2)  # the spot's half-height, centred at -23
+    assert np.all(surfaces.edge("jupiter", -26, lon)[spot] <= -23 - half)
+    assert np.all(surfaces.edge("jupiter", -20, lon)[spot] >= -23 + half)
