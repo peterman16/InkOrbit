@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import numpy as np
 
+from .geometry import points_in_polygon
 
-def points_in_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
-    """Even-odd point-in-polygon test, vectorised over points."""
-    px, py = points[:, 0:1], points[:, 1:2]
-    x0, y0 = polygon[:, 0], polygon[:, 1]
-    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
-    crosses = (y0 > py) != (y1 > py)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        x_at = x0 + (py - y0) * (x1 - x0) / (y1 - y0)
-    return np.count_nonzero(crosses & (px < x_at), axis=1) % 2 == 1
+# A fill too small or thin for a few dots at its spacing (a little crater shadow) is stippled finer instead,
+# by this factor at a time, down to this spacing: it stays dots, never turns solid.
+_MIN_DOTS, _FINER, _FINEST_MM = 5, 0.75, 0.15
 
 
 def stipple(polygon: np.ndarray, spacing: float, seed: int = 0) -> np.ndarray:
-    """Hand-stipple-like dots: a jittered grid clipped to the polygon."""
+    """Hand-stipple-like dots: a jittered grid clipped to the polygon, finer if it would hold fewer than 5 dots."""
+    dots = _jittered(polygon, spacing, seed)
+    while len(dots) < _MIN_DOTS and spacing > _FINEST_MM:
+        spacing = max(spacing * _FINER, _FINEST_MM)
+        dots = _jittered(polygon, spacing, seed)
+    return dots
+
+
+def _jittered(polygon: np.ndarray, spacing: float, seed: int) -> np.ndarray:
     lo, hi = polygon.min(axis=0), polygon.max(axis=0)
     xs = np.arange(lo[0], hi[0] + spacing, spacing)
     ys = np.arange(lo[1], hi[1] + spacing, spacing)

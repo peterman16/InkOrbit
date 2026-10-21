@@ -127,11 +127,11 @@ def _surface_lines(scene):
 
 
 def test_surface_is_drawn_only_for_bodies_with_features():
-    earth, moon = ink.Scene(), ink.Scene()
+    earth, neptune = ink.Scene(), ink.Scene()
     draw.body(earth, 1.0, body="earth", surface=True)
-    draw.body(moon, 1.0, body="moon", surface=True)
+    draw.body(neptune, 1.0, body="neptune", surface=True)
     assert _surface_lines(earth)
-    assert not _surface_lines(moon)  # never falls back to Earth's coastlines
+    assert not _surface_lines(neptune)  # no features for Neptune: never falls back to Earth's coastlines
 
 
 def test_surface_needs_a_body():
@@ -204,3 +204,43 @@ def test_belt_edges_are_deterministic_wavy_and_clear_of_the_red_spot():
     half = 3 * np.sqrt(1 - (lon[spot] / 7) ** 2)  # the spot's half-height, centred at -23
     assert np.all(surfaces.edge("jupiter", -26, lon)[spot] <= -23 - half)
     assert np.all(surfaces.edge("jupiter", -20, lon)[spot] >= -23 + half)
+
+
+def _fills(name, spacing, spin=0.0):
+    s = ink.Scene()
+    draw.body(s, 1.0, body=name, surface=True, sun=None, spin=spin)
+    return [i for i in s.items if isinstance(i, Fill) and i.spacing_mm == spacing]
+
+
+def test_moon_regions_are_stippled_in_two_tones_and_mars_has_none():
+    for spacing in (st.DEFAULT_STYLE.region_stipple_mm, st.DEFAULT_STYLE.region_core_stipple_mm):
+        assert _fills("moon", spacing)
+        assert not _fills("mars", spacing)  # no region data for Mars
+
+
+@pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
+def test_rocky_bodies_get_crater_shadows_and_rims(name):
+    assert _fills(name, st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+    s = ink.Scene()
+    draw.body(s, 1.0, body=name, surface=True)
+    assert _surface_lines(s)
+
+
+def test_crater_shadows_stay_small_across_the_antimeridian():
+    # Facing longitude 180: a shadow ring crossing it must not become a band around the globe.
+    shadows = _fills("moon", st.DEFAULT_STYLE.crater_shadow_stipple_mm, spin=np.pi)
+    assert shadows and max(_area(f.polygon) for f in shadows) < 0.05
+
+
+def test_some_crater_floors_are_cut_out_of_the_maria():
+    maria = _fills("moon", st.DEFAULT_STYLE.region_stipple_mm)
+    assert any(len(f.polygon) > 1 + len(np.unique(f.polygon, axis=0)) for f in maria)  # a hole repeats the start
+
+
+def test_rocky_globe_renders_the_same_twice():
+    def png():
+        s = ink.Scene()
+        draw.body(s, 1.0, body="moon", surface=True)
+        return s.render().to_array(dpi=72)
+
+    assert np.array_equal(png(), png())

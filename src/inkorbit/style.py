@@ -80,6 +80,9 @@ class Style:
     # Fill patterns.
     stipple_spacing_mm: float = 0.55
     stipple_dot_mm: float = 0.2
+    region_stipple_mm: float = 0.7  # base tone of dark regions such as lunar maria
+    region_core_stipple_mm: float = 0.4  # extra stipple over the regions' cores; together they grade the tone
+    crater_shadow_stipple_mm: float = 0.3  # stipple in crater shadow crescents
     hatch_spacing_mm: float = 0.9
     hatch_angle_deg: float = 45.0
     hatch_pen_mm: float = 0.18
