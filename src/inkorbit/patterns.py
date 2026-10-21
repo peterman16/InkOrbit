@@ -4,16 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-
-def points_in_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
-    """Even-odd point-in-polygon test, vectorised over points."""
-    px, py = points[:, 0:1], points[:, 1:2]
-    x0, y0 = polygon[:, 0], polygon[:, 1]
-    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
-    crosses = (y0 > py) != (y1 > py)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        x_at = x0 + (py - y0) * (x1 - x0) / (y1 - y0)
-    return np.count_nonzero(crosses & (px < x_at), axis=1) % 2 == 1
+from .geometry import points_in_polygon
 
 
 def stipple(polygon: np.ndarray, spacing: float, seed: int = 0) -> np.ndarray:

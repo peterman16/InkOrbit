@@ -252,6 +252,65 @@ def with_holes(outer: np.ndarray, holes: list[np.ndarray]) -> np.ndarray:
     return np.vstack([closed[0], *[np.vstack([h, closed[0][:1]]) for h in closed[1:]]])
 
 
+def points_in_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Even-odd point-in-polygon test, vectorised over points."""
+    px, py = points[:, 0:1], points[:, 1:2]
+    x0, y0 = polygon[:, 0], polygon[:, 1]
+    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
+    crosses = (y0 > py) != (y1 > py)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        x_at = x0 + (py - y0) * (x1 - x0) / (y1 - y0)
+    return np.count_nonzero(crosses & (px < x_at), axis=1) % 2 == 1
+
+
+def _limb_pieces(points3: np.ndarray) -> list[np.ndarray]:
+    """Visible runs of a closed loop of view points that crosses the limb, in 2D with their ends snapped to the limb."""
+    pts = np.roll(points3, -int(np.argmax(points3[:, 2] < 0)), axis=0)  # start hidden, so no run wraps the seam
+    pieces = []
+    for run in visible_runs(np.vstack([pts, pts[:1]])):
+        run = run[:, :2].copy()
+        run[[0, -1]] /= np.linalg.norm(run[[0, -1]], axis=1, keepdims=True)
+        pieces.append(run)
+    return pieces
+
+
+def _join_on_limb(pieces: list[np.ndarray], inside) -> list[np.ndarray]:
+    """Close pieces ending on the limb into polygons, with the limb arcs between neighbouring ends that are inside.
+
+    ``inside`` maps (N, 3) unit view points to booleans. Coincident ends (a boundary that runs out to the limb
+    and back along itself) are never joined to each other.
+    """
+    if not pieces:
+        return []
+    ends = np.array([p[i] for p in pieces for i in (0, -1)])
+    ang = np.arctan2(ends[:, 1], ends[:, 0])
+    order = np.argsort(ang)
+    nxt = np.roll(order, -1)
+    span = np.diff(ang[order], append=ang[order[0]] + 2 * np.pi)
+    mid = ang[order] + span / 2
+    keep = inside(np.column_stack([np.cos(mid), np.sin(mid), np.zeros_like(mid)])) & (span > 1e-9)
+    joined: dict[int, tuple[int, np.ndarray]] = {}
+    for a, b, s in zip(order[keep], nxt[keep], span[keep], strict=True):
+        arc = ang[a] + np.linspace(0.0, s, 91)
+        joined[a] = (b, np.column_stack([np.cos(arc), np.sin(arc)]))
+        joined[b] = (a, np.column_stack([np.cos(arc[::-1]), np.sin(arc[::-1])]))
+    polys, used = [], set()
+    for first in range(len(pieces)):
+        if first in used:
+            continue
+        parts, e = [], 2 * first
+        while e // 2 not in used:
+            used.add(e // 2)
+            parts.append(pieces[e // 2] if e % 2 == 0 else pieces[e // 2][::-1])
+            if (e ^ 1) not in joined:
+                break
+            e, arc = joined[e ^ 1][0], joined[e ^ 1][1]
+            parts.append(arc)
+        poly = np.vstack(parts)
+        polys.append(np.vstack([poly, poly[:1]]))
+    return polys
+
+
 def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.ndarray]:
     """Visible part of the latitude belt ``south``..``north`` (degrees) of a unit globe, as 2D polygons.
 
@@ -267,12 +326,11 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
     t = np.linspace(-np.pi, np.pi, n, endpoint=False)
     south, north = (np.broadcast_to(np.asarray(e, float), t.shape) for e in (south, north))
 
-    def in_belt(v: np.ndarray) -> bool:
-        x, y, z = v @ rotation  # body frame
+    def in_belt(v: np.ndarray) -> np.ndarray:
+        x, y, z = (v @ rotation).T  # body frame
         lon, lat = np.degrees(np.arctan2(y, x)), np.degrees(np.arcsin(np.clip(z, -1.0, 1.0)))
-        return (
-            np.interp(lon, np.degrees(t), south, period=360) <= lat <= np.interp(lon, np.degrees(t), north, period=360)
-        )
+        lon_t = np.degrees(t)
+        return (np.interp(lon, lon_t, south, period=360) <= lat) & (lat <= np.interp(lon, lon_t, north, period=360))
 
     pieces: list[np.ndarray] = []
     outers: list[np.ndarray] = []
@@ -285,45 +343,43 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
             # Seen whole: its inside holds the visible pole, so the belt is inside iff that pole is on the belt's side.
             (outers if (pole[2] > 0) == is_south else holes).append(np.vstack([pts[:, :2], pts[:1, :2]]))
             continue
-        pts = np.roll(pts, -int(np.argmax(pts[:, 2] < 0)), axis=0)  # start hidden, so no run wraps the seam
-        for run in visible_runs(np.vstack([pts, pts[:1]])):
-            run = run[:, :2].copy()
-            run[[0, -1]] /= np.linalg.norm(run[[0, -1]], axis=1, keepdims=True)  # end exactly on the limb
-            pieces.append(run)
-    # Ends of the pieces, in angle order round the limb; the limb arc between neighbours is kept if in the belt.
-    ends = np.array([p[i] for p in pieces for i in (0, -1)]).reshape(-1, 2)
-    ang = np.arctan2(ends[:, 1], ends[:, 0])
-    order = np.argsort(ang)
-    joined: dict[int, tuple[int, np.ndarray]] = {}
-    for a, b in zip(order, np.roll(order, -1), strict=True):
-        span = (ang[b] - ang[a]) % (2 * np.pi)
-        mid = ang[a] + span / 2
-        if in_belt(np.array([np.cos(mid), np.sin(mid), 0.0])):
-            arc = ang[a] + np.linspace(0.0, span, 91)
-            joined[a] = (b, np.column_stack([np.cos(arc), np.sin(arc)]))
-            joined[b] = (a, np.column_stack([np.cos(arc[::-1]), np.sin(arc[::-1])]))
-    polys, used = [], set()
-    for first in range(len(pieces)):
-        if first in used:
-            continue
-        parts, e = [], 2 * first
-        while e // 2 not in used:
-            used.add(e // 2)
-            parts.append(pieces[e // 2] if e % 2 == 0 else pieces[e // 2][::-1])
-            if (e ^ 1) not in joined:
-                break
-            e, arc = joined[e ^ 1][0], joined[e ^ 1][1]
-            parts.append(arc)
-        poly = np.vstack(parts)
-        polys.append(np.vstack([poly, poly[:1]]))
+        pieces += _limb_pieces(pts)
+    polys = _join_on_limb(pieces, in_belt)
     polys += outers
-    if not polys and (holes or in_belt(np.array([0.0, 0.0, 1.0]))):
+    if not polys and (holes or in_belt(np.array([[0.0, 0.0, 1.0]]))[0]):
         a = np.linspace(-np.pi, np.pi, 361)
         polys = [np.column_stack([np.cos(a), np.sin(a)])]
     if polys:
         holes = [h[::-1] if _signed_area(h) * _signed_area(polys[0]) > 0 else h for h in holes]
         polys[0] = with_holes(polys[0], holes)
     return polys
+
+
+def ring_polygons(rotation: np.ndarray, lonlat_ring) -> list[np.ndarray]:
+    """Visible part of the region inside a closed lon/lat ring of a unit globe, as closed 2D polygons in the unit disc.
+
+    ``lonlat_ring`` is an (N, 2) array of east longitude in -180..180 and latitude, in degrees. The region is the
+    even-odd inside of the ring in the lon/lat plane, so a ring round a pole must close along that pole, e.g.
+    ``(-180, 60), (180, 60), (180, 90), (-180, 90)``. Edges are straight in lon/lat. Where the region runs past
+    the limb it is closed along the limb rather than by pushing hidden points onto it.
+    """
+    ring = np.asarray(lonlat_ring, dtype=float)
+    ring = np.vstack([ring, ring[:1]])
+    seg = np.diff(ring, axis=0)
+    steps = np.maximum(1, np.ceil(np.abs(seg).max(axis=1))).astype(int)  # at most a degree per step
+    dense = np.vstack([a + np.outer(np.arange(m) / m, d) for a, d, m in zip(ring[:-1], seg, steps, strict=True)])
+    pts = lat_lon_to_view(np.radians(dense[:, 1]), np.radians(dense[:, 0]), rotation)
+
+    def inside(v: np.ndarray) -> np.ndarray:
+        x, y, z = (v @ rotation).T  # body frame
+        lonlat = np.column_stack([np.arctan2(y, x), np.arcsin(np.clip(z, -1.0, 1.0))])
+        return points_in_polygon(np.degrees(lonlat), ring)
+
+    if np.all(pts[:, 2] >= 0):
+        return [np.vstack([pts[:, :2], pts[:1, :2]])]
+    if np.all(pts[:, 2] < 0):
+        return []
+    return _join_on_limb(_limb_pieces(pts), inside)
 
 
 def cap_polygons(rotation: np.ndarray, lat: float, lon: float, radius: float) -> list[np.ndarray]:
