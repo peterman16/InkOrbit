@@ -16,6 +16,8 @@ import numpy as np
 
 from . import geometry as geo
 from . import style as st
+from . import surfaces
+from .bodies import Body
 from .elements import Elements, Frame
 from .scene import Direction, Line, Scene, point_along
 
@@ -94,7 +96,8 @@ def body(
     sun: float | None = np.pi,
     sun_elevation: float = np.radians(25),
     grid_step: float = np.radians(30),
-    coastlines: bool = False,
+    body: str | Body | None = None,
+    surface: bool = False,
     label: str | None = None,
 ) -> None:
     """A globe: stippled night side, latitude/longitude grid and outline.
@@ -104,9 +107,12 @@ def body(
     ``sun=None`` draws no night side. ``tilt`` leans the north pole towards the
     viewer and ``spin`` turns the globe about its axis. Given an ``orbit``, the
     globe is seen down that orbit's normal, as drawn in ``frame``, in place of
-    ``tilt`` (longitude 0 is the vernal equinox). ``coastlines`` draws the
-    Earth's coastlines on the visible hemisphere.
+    ``tilt`` (longitude 0 is the vernal equinox). ``surface=True`` draws the
+    surface features of ``body`` (a name or :class:`Body`) on the visible
+    hemisphere; it never assumes Earth.
     """
+    if surface and body is None:
+        raise ValueError("surface needs body=")
     c = np.asarray(center, dtype=float)
     if sun is not None:
         direction = np.array(
@@ -124,13 +130,11 @@ def body(
         step = np.degrees(grid_step)
         for line in geo.graticule(rotation, step, step):
             scene.line(c + radius * line, st.GRATICULE)
-    if coastlines:
-        from .maps import coastlines as earth_coastlines
-
-        for coast in earth_coastlines():
-            view = geo.lat_lon_to_view(np.radians(coast[:, 1]), np.radians(coast[:, 0]), rotation)
+    if surface:
+        for feature in surfaces.features(body):
+            view = geo.lat_lon_to_view(np.radians(feature[:, 1]), np.radians(feature[:, 0]), rotation)
             for run in geo.visible_runs(view):
-                scene.line(c + radius * run[:, :2], st.COASTLINE)
+                scene.line(c + radius * run[:, :2], st.SURFACE)
     scene.line(geo.circle(tuple(c), radius), st.OUTLINE)
     if label:
         # Attach to the rim, upper right, where it reads as naming the globe.
