@@ -59,9 +59,17 @@ class MatplotlibRenderer:
 
         solid_batch: list[Stroke] = []
 
+        # Matplotlib stacks by zorder before insertion order (patches under collections), so each paper
+        # knock-out lifts itself and everything after it a whole layer above what was drawn before.
+        layer = 0
+
+        def add(artist):
+            artist.set_zorder(artist.get_zorder() + 10 * layer)
+            ax.add_artist(artist)
+
         def flush():
             if solid_batch:
-                ax.add_collection(_collection(solid_batch, style.ink, None))
+                add(_collection(solid_batch, style.ink, None))
                 solid_batch.clear()
 
         # Consecutive solid strokes are batched; anything else keeps its order.
@@ -71,12 +79,13 @@ class MatplotlibRenderer:
                 continue
             flush()
             if isinstance(item, Stroke):
-                ax.add_collection(_collection([item], style.ink, item.dash_mm))
+                add(_collection([item], style.ink, item.dash_mm))
             elif isinstance(item, Solid):
                 color = style.paper if item.paper else style.ink
-                ax.add_patch(Polygon(item.polygon, closed=True, facecolor=color, edgecolor="none", linewidth=0))
+                layer += item.paper
+                add(Polygon(item.polygon, closed=True, facecolor=color, edgecolor="none", linewidth=0))
             elif isinstance(item, Dots):
-                ax.add_collection(_dots(item, style.ink, ax))
+                add(_dots(item, style.ink, ax))
             else:
                 raise TypeError(f"cannot draw {type(item).__name__}")
         flush()
