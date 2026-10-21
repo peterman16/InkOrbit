@@ -77,18 +77,19 @@ def globes_plate() -> ink.Plate:
         ("Mercury", 160, 10),
         ("Venus", 0, 10),
         ("Mars", -110, 20),
-        ("Jupiter", 0, 10),
+        ("Jupiter", 0, 0),
         ("Saturn", 0, 25),
     ]
-    plate = ink.Plate("Figure 2.1-1  The planets and the Moon (equal size, not to scale)", page=(260, 150))
+    plate = ink.Plate("Figure 2.1-1  The planets and the Moon (equal size, not to scale)", page=(260, 135))
     for k, (name, spin, tilt) in enumerate(bodies):
         row, col = divmod(k, 4)
         x = (col + (0.5 if row else 0)) * 3.0
         plate.body(
             1.0,
-            (x, -row * 3.0),
+            (x, -row * 2.6),
             body=name,
             surface=True,
+            sun=None,
             spin=np.radians(spin),
             tilt=np.radians(tilt),
             label=name.upper(),
