@@ -83,7 +83,7 @@ def globes_plate() -> ink.Plate:
     plate = ink.Plate("Figure 2.1-1  The planets and the Moon (equal size, not to scale)", page=(260, 135))
     for k, (name, spin, tilt) in enumerate(bodies):
         row, col = divmod(k, 4)
-        x = (col + (0.5 if row else 0)) * 3.0
+        x = (col + (0.5 if row else 0)) * 3.0 + (1.1 if name == "Saturn" else 0.0)  # room for its rings
         plate.body(
             1.0,
             (x, -row * 2.6),
