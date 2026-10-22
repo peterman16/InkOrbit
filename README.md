@@ -51,6 +51,12 @@ date, so longitude 0 faces the vernal equinox; the night side keeps a fixed Sun 
 An orbit that comes within 10% of the body's radius gets no direction arrowheads: at true
 scale it lies on the globe's outline, and arrowheads there read as marks on the limb.
 
+`surface=True` draws each body's surface: coastlines on Earth, cloud belts on Jupiter and
+Saturn, craters and maria on the Moon, craters and plains on Mercury and Venus, craters and
+volcanoes on Mars. The features are stylised from public data (see Credits).
+
+![Earth, the Moon and five planets with their surfaces](docs/images/globes.png)
+
 ## Printed mode
 
 `printed=True` turns the finished image into a two-colour bitmap that looks scanned from

@@ -69,11 +69,40 @@ def ground_track_plate() -> ink.Plate:
     )
 
 
+def globes_plate() -> ink.Plate:
+    """Seven bodies at one size (not to scale), each turned to show its best-known feature."""
+    bodies = [  # name, spin and tilt in degrees
+        ("Earth", -75, 20),
+        ("Moon", 0, 10),
+        ("Mercury", 160, 10),
+        ("Venus", 0, 10),
+        ("Mars", -110, 20),
+        ("Jupiter", 0, 0),
+        ("Saturn", 0, 25),
+    ]
+    plate = ink.Plate("Figure 2.1-1  The planets and the Moon (equal size, not to scale)", page=(260, 135))
+    for k, (name, spin, tilt) in enumerate(bodies):
+        row, col = divmod(k, 4)
+        x = (col + (0.5 if row else 0)) * 3.0
+        plate.body(
+            1.0,
+            (x, -row * 2.6),
+            body=name,
+            surface=True,
+            sun=None,
+            spin=np.radians(spin),
+            tilt=np.radians(tilt),
+            label=name.upper(),
+        )
+    return plate
+
+
 PLATES = {
     "orbit_diagram": orbit_plate,
     "orbits_diagram": orbits_plate,
     "hohmann_diagram": hohmann_plate,
     "ground_track_diagram": ground_track_plate,
+    "globes": globes_plate,
 }
 
 if __name__ == "__main__":
