@@ -125,6 +125,25 @@ def visible_runs(points3: np.ndarray) -> list[np.ndarray]:
     return runs
 
 
+def ring_arcs(rotation: np.ndarray, radius: float, n: int = 181) -> tuple[np.ndarray, np.ndarray]:
+    """Equatorial circle of ``radius`` body radii as (near, far) 2D view arcs, split where it crosses view z = 0.
+
+    ``near`` is the half towards the viewer (z >= 0), ``far`` the half behind; each is one contiguous (n, 2) arc and
+    they share their end points. Both start at the same body longitude whatever the radius, so an outer arc stacked
+    with a reversed inner arc is a ring band. Seen pole-on the circle lies in z = 0: it is all ``near`` (one closed
+    circle) and ``far`` is empty.
+    """
+    a, b = rotation[2, 0], rotation[2, 1]  # view z of the circle point at longitude t is a cos t + b sin t
+    if np.hypot(a, b) < 1e-9:
+        t = np.linspace(0.0, 2 * np.pi, 2 * n - 1)
+        return radius * lat_lon_to_view(0.0, t, rotation)[:, :2], np.empty((0, 2))
+    t0 = np.arctan2(-a, b)  # z rises through zero here, so z >= 0 on t0..t0 + pi
+    near, far = (
+        radius * lat_lon_to_view(0.0, t0 + k * np.pi + np.linspace(0.0, np.pi, n), rotation)[:, :2] for k in (0, 1)
+    )
+    return near, far
+
+
 def graticule(
     rotation: np.ndarray, lat_step_deg: float = 30.0, lon_step_deg: float = 30.0, n: int = 241
 ) -> list[np.ndarray]:

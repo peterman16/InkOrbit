@@ -244,3 +244,34 @@ def test_rocky_globe_renders_the_same_twice():
         return s.render().to_array(dpi=72)
 
     assert np.array_equal(png(), png())
+
+
+def _ring_stipples(scene):
+    return [i for i in scene.items if isinstance(i, Fill) and i.spacing_mm in st.DEFAULT_STYLE.ring_stipple_mm]
+
+
+def test_saturn_surface_adds_ring_bands_and_other_bodies_are_unchanged():
+    plain, ringed, jupiter = ink.Scene(), ink.Scene(), ink.Scene()
+    draw.body(plain, 1.0, body="saturn")
+    draw.body(ringed, 1.0, body="saturn", surface=True)
+    draw.body(jupiter, 1.0, body="jupiter", surface=True)
+    assert len(_ring_stipples(ringed)) == 6  # near and far halves of C, B and A
+    # Paper behind the globe and under the three near halves; none without rings.
+    assert sum(i.pattern == "paper" for i in ringed.items if isinstance(i, Fill)) == 4
+    for scene in (plain, jupiter):
+        assert not _ring_stipples(scene) and not any(isinstance(i, Fill) and i.pattern == "paper" for i in scene.items)
+
+
+def test_ring_label_sits_beyond_the_a_ring():
+    scene = ink.Scene()
+    draw.body(scene, 1.0, body="saturn", surface=True, label="SATURN")
+    (label,) = [i for i in scene.items if isinstance(i, Label)]
+    assert np.linalg.norm(label.at) > 2.0  # out at the A ring's edge (2.27 radii), not on the bands
+
+
+@pytest.mark.parametrize(("tilt", "halves"), [(0.0, 6), (np.pi / 2, 3)])
+def test_edge_on_and_pole_on_rings_draw(tilt, halves):
+    scene = ink.Scene()
+    draw.body(scene, 1.0, body="saturn", surface=True, tilt=tilt, label="SATURN")
+    scene.render()
+    assert len(_ring_stipples(scene)) == halves  # pole-on there is no far half

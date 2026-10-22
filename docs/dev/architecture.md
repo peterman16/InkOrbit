@@ -32,11 +32,11 @@ all of them and imports none of them. Nothing in the core imports an adapter.
 | `labels.py` | Automatic label placement (from step 2) | render-engineer |
 | `render/` | Backends | render-engineer |
 | `scene.py` | Scene items and the `Scene` builder | shared: Architect decides changes |
-| `geometry.py` | Plane geometry: conics, arcs, rotations | orbit-engineer |
+| `geometry.py` | Plane geometry: conics, arcs, rotations; ring arcs split near/far at the view plane | orbit-engineer |
 | `elements.py` | `Elements` dataclass, frames (from step 2) | orbit-engineer |
 | `draw.py` | Primitives: orbit, body, apsides, nodes, angles, vectors (from step 2) | orbit-engineer |
 | `diagrams.py` / `plate.py` | Named diagrams built from `draw`; `Plate` | orbit-engineer |
-| `surfaces.py` | Per-body surface data as lon/lat: gazetteer craters with seeded natural rims and shadow crescents, pre-generalised region rings (base and core levels) built offline by `tools/build_surfaces.py`, Earth coastlines, stylised gas-giant bands; data in `data/<body>_surface.npz` | orbit-engineer |
+| `surfaces.py` | Per-body surface data as lon/lat: gazetteer craters with seeded natural rims and shadow crescents, pre-generalised region rings (base and core levels) built offline by `tools/build_surfaces.py`, Earth coastlines, stylised gas-giant bands; Saturn's stylised ring bands (inner/outer radii in body radii, tone); data in `data/<body>_surface.npz` | orbit-engineer |
 | `adapters.py` | poliastro/hapsira, Skyfield, astropy objects read by attribute; Skyfield imported lazily for ground tracks only | orbit-engineer |
 | `printed.py` | Printed mode: rendered page to a 1-bit ink/paper bitmap (spread, grain, skew). Pure numpy. | render-engineer |
 
@@ -67,3 +67,4 @@ Add one line per structural decision: date, decision, reason.
   10% of the body radius drop their arrowheads instead.
 - 2026-10-20: Surface features replace coastlines. `draw.body(body=, surface=)` never assumes Earth (KAN-18). One SURFACE role. Body-fixed longitude 0 sits at the globe's longitude 0; spin rotates. Gazetteer centre+diameter rings; gas-giant bands are constants; no new deps.
 - 2026-10-21: Rocky globes get natural craters (seeded low-harmonic rims, smaller craters cut larger rims, west-lit shadow stipple; mons only on Mars and Venus) and graded-stipple regions. Regions are generalised offline (blur + contour; Moon from USGS mare outlines, Mercury/Venus from gazetteer plains; none on Mars yet, KAN-28) and stored as base/core rings; no runtime contourpy. Fills with holes are single even-odd rings bridged by `geometry.with_holes`; no Scene/Fill API change. Regions and shadows are limb-clipped on the sphere (`geometry.ring_polygons`). Stipple sizes are `Style` fields (custom Style not yet honoured, KAN-37); `surface=True` is the only switch.
+- 2026-10-21: Saturn's rings are drawn by `draw.body` from `surfaces.rings` with `surface=True`, in the equatorial plane with the globe's rotation: the far half-bands before the globe, a paper knock-out of the disc, the globe, then the near half-bands over paper knock-outs. No new scene item. Ring shadows (on the globe and on the rings) are deferred to a v2.

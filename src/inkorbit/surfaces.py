@@ -28,6 +28,19 @@ _BELTS = {
 }
 
 
+# Saturn's C, B and A rings as (inner, outer, tone) in Saturn equatorial radii (60,268 km); the Cassini Division is
+# the gap between B and A.
+_RINGS = {"saturn": ((1.239, 1.527, "light"), (1.527, 1.951, "dense"), (2.027, 2.269, "medium"))}
+
+
+def rings(body: str | Body) -> tuple[tuple[float, float, str], ...]:
+    """Ring bands (inner radius, outer radius, tone) of ``body``, radii in body radii; empty if it has none.
+
+    The bands are stylised: edges are rounded, not accurate to tens of km.
+    """
+    return _RINGS.get(get_body(body).name.lower(), ())
+
+
 def belts(body: str | Body) -> list[tuple[float, float]]:
     """Latitude ranges (south, north) in degrees of ``body``'s dark cloud belts; empty if none."""
     return list(_BELTS.get(get_body(body).name.lower(), ()))
