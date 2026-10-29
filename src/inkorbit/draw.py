@@ -61,27 +61,67 @@ def orbit(
     label: str | None = None,
     label_at: float = 0.35,
     max_radius: float | None = None,
+    view: tuple[float, float] | None = None,
+    body_radius: float | None = None,
 ) -> Line:
     """Draw an orbit from :class:`Elements` or from an (N, 2) / (N, 3) array of positions.
 
     3D positions are projected onto their own orbital plane, periapsis to the
     right (the perifocal view). ``arrows`` are fractions of the path length
     where direction arrowheads go; ``label_at`` is where the label attaches.
+
+    ``view=(elevation, azimuth)`` (radians) instead shows the orbit from an
+    oblique camera in the inertial frame, azimuth from the vernal equinox; it
+    replaces ``frame``. Arrays are then taken as inertial, (N, 2) ones as lying
+    in the equator. The part behind a globe of ``body_radius`` at the origin
+    is drawn HIDDEN and loses its arrowheads; draw the orbit after the globe,
+    seen with ``draw.body(tilt=elevation, spin=azimuth)``. Returns the first
+    run in front.
     """
     if isinstance(orbit, Elements):
-        points = orbit.points(frame=frame, max_radius=max_radius)
+        points = orbit.points(frame=frame if view is None else "perifocal", max_radius=max_radius)
     else:
         points = np.asarray(orbit, dtype=float)
-        if points.ndim == 2 and points.shape[1] == 3:
+        if view is None and points.ndim == 2 and points.shape[1] == 3:
             points = geo.project_to_plane(points)
     closed = isinstance(orbit, Elements) and orbit.is_closed
-    line = scene.line(points, role, arrows=arrows)
+    if view is None:
+        line = scene.line(points, role, arrows=arrows)
+    else:
+        points3 = _project(view, points, orbit if isinstance(orbit, Elements) else None)
+        lines = _split(scene, points3, role, body_radius, closed)
+        line = next((ln for ln in lines if ln.role == role), lines[0])
+        for fraction in arrows:
+            at, direction = point_along(points3, fraction)
+            if not geo._behind(at[None], body_radius or 0.0)[0]:
+                scene.arrowhead(at[:2], direction[:2])
+        points = points3[:, :2]
     if label:
         # Let the label slide along the orbit if its first choice is crowded.
         fractions = [label_at + k * 0.06 * sign for k in range(1, 8) for sign in (1, -1)]
         anchors = [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
         scene.label(label, point_along(points, label_at)[0], priority=2, alternatives=anchors)
     return line
+
+
+def _project(view: tuple[float, float], points: np.ndarray, elements: Elements | None = None) -> np.ndarray:
+    """Camera-frame (N, 3) points seen from ``view=(elevation, azimuth)``, +z towards the viewer.
+
+    With ``elements`` the points are perifocal 2D; otherwise (N, 3) points are inertial and (N, 2) points lie in the
+    equatorial plane.
+    """
+    pts = np.asarray(points, dtype=float)
+    if pts.shape[1] == 2:
+        pts = np.column_stack([pts, np.zeros(len(pts))])
+    if elements is not None:
+        pts = pts @ geo.orbit_view_rotation(elements.i, elements.raan, elements.argp)  # perifocal -> inertial
+    return pts @ geo.view_rotation(*view).T
+
+
+def _split(scene: Scene, points3: np.ndarray, role: str, body_radius: float | None, closed: bool = False) -> list[Line]:
+    """Lines of camera-frame points: in ``role`` in front of the globe of ``body_radius``, HIDDEN behind it."""
+    runs = geo.split_behind(points3, body_radius or 0.0, closed)
+    return [scene.line(run, st.HIDDEN if hidden else role) for run, hidden in runs]
 
 
 def body(

@@ -275,3 +275,40 @@ def test_edge_on_and_pole_on_rings_draw(tilt, halves):
     draw.body(scene, 1.0, body="saturn", surface=True, tilt=tilt, label="SATURN")
     scene.render()
     assert len(_ring_stipples(scene)) == halves  # pole-on there is no far half
+
+
+def _lines(scene, role):
+    return [i for i in scene.items if isinstance(i, Line) and i.role == role]
+
+
+@pytest.mark.parametrize("elevation", [0.0, 0.4, 1.2])
+def test_oblique_orbit_projects_the_apogee(elevation):
+    # Equatorial, argp = 0: apogee at inertial (-a(1 + e), 0, 0). Azimuth 90 deg puts the -x axis to the right
+    # at any elevation (view_rotation: longitude 90E faces the viewer), so apogee is drawn at a(1 + e) = 3.
+    line = draw.orbit(ink.Scene(), ink.Elements(a=2.0, e=0.5), view=(elevation, np.pi / 2), arrows=())
+    assert np.hypot(*line.points.T).max() == pytest.approx(3.0, rel=1e-5)
+    # Azimuth 0: the apse line points at the viewer and tilts up by the elevation.
+    line = draw.orbit(ink.Scene(), ink.Elements(a=2.0, e=0.5), view=(elevation, 0.0), arrows=())
+    assert line.points[:, 1].max() == pytest.approx(3.0 * np.sin(elevation), abs=1e-4)
+
+
+def test_oblique_orbit_behind_the_globe_is_hidden_without_arrowheads():
+    # Circular equatorial orbit of radius 2 at azimuth 0: half way round (nu = pi) it is at view
+    # (0, 2 sin el, -2 cos el), behind the unit globe; a quarter round (nu = pi/2) it is at (2, 0, 0), clear of it.
+    scene = ink.Scene()
+    line = draw.orbit(scene, ink.Elements(a=2.0), view=(0.3, 0.0), body_radius=1.0, arrows=(0.25, 0.5))
+    (front,), (hidden,) = _lines(scene, st.ORBIT), _lines(scene, st.HIDDEN)
+    assert line is front
+    assert np.all(np.hypot(*hidden.points.T) <= 1.0 + 1e-9)
+    assert np.allclose(front.points[[0, -1]], hidden.points[[-1, 0]])
+    (arrow,) = [i for i in scene.items if isinstance(i, Arrowhead)]
+    assert np.allclose(arrow.at, [2.0, 0.0], atol=1e-3)
+
+
+def test_orbit_without_view_is_unchanged():
+    a, b = ink.Scene(), ink.Scene()
+    draw.orbit(a, ELLIPSE, label="orbit")
+    draw.orbit(b, ELLIPSE, label="orbit", view=None, body_radius=1.0)
+    assert len(a.items) == len(b.items)
+    for p, q in zip(a.items, b.items, strict=True):
+        assert type(p) is type(q) and all(np.array_equal(getattr(p, k), getattr(q, k)) for k in vars(p))
