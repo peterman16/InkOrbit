@@ -216,12 +216,17 @@ def hohmann(
     style=None,
     labels: bool = True,
     printed: bool | Printed = False,
+    view: tuple[float, float] | None = None,
 ) -> Plate:
     """A Hohmann transfer between two circular coplanar orbits.
 
     Radii are numbers in km, astropy lengths, or circular ``Orbit`` objects.
     With ``delta_v`` the two burns are drawn as vectors with their Δv, and the
     totals and time of flight are listed under the figure.
+
+    ``view=(elevation, azimuth)`` shows the transfer from an oblique camera, as
+    in :func:`orbit`, with the orbits in the equator; the burn vectors are left
+    out but their totals are still listed.
     """
     r1, r2 = _radius(r_initial), _radius(r_final)
     if np.isclose(r1, r2):
@@ -240,31 +245,40 @@ def hohmann(
 
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
-    draw.body(
-        s,
-        radius,
-        body=central,
-        surface=surface,
-        orbit=as_elements(given[0]) if given else Elements(a=r1),
-        frame="plane",
-    )
-    for r, name, at in ((r1, names[0], 0.62), (r2, names[1], 0.88)):
-        el = Elements(a=r)
-        draw.orbit(s, el, role=st.SECONDARY, frame="plane", label=name, label_at=at, **_hug(el, radius))
-    s.line(half, st.TRANSFER, arrows=(0.5,))
-    s.label(names[2], point_along(half, 0.3)[0], priority=2)
+    circles = [Elements(a=r1), Elements(a=r2)]
+    _warn_edge_on(view, circles)
+    _globe(s, radius, central, surface, view, as_elements(given[0]) if given else circles[0], frame="plane")
+    for el, name, at in zip(circles, names, (0.62, 0.88), strict=False):
+        draw.orbit(
+            s,
+            el,
+            role=st.SECONDARY,
+            frame="plane",
+            label=name,
+            label_at=at,
+            view=view,
+            body_radius=radius,
+            **_hug(el, radius),
+        )
+    line = draw.orbit(s, half, role=st.TRANSFER, arrows=(0.5,), view=view, body_radius=radius)
+    s.label(names[2], point_along(line.points, 0.3)[0], priority=2)
 
     start, end = half[0], half[-1]
-    s.marker(start, "dot")
-    s.marker(end, "dot")
+    if view is None:
+        s.marker(start, "dot")
+        s.marker(end, "dot")
+    else:  # the burns are at (r1, 0) and (-r2, 0) whichever way the transfer goes
+        for el, nu in zip(circles, (0.0, np.pi), strict=True):
+            draw.spacecraft(s, el, nu, marker="dot", view=view, body_radius=radius)
     if delta_v and np.isfinite(mu):
         dv1 = np.sqrt(mu * (2 / r1 - 1 / a)) - np.sqrt(mu / r1)
         dv2 = np.sqrt(mu / r2) - np.sqrt(mu * (2 / r2 - 1 / a))
         tof = np.pi * np.sqrt(a**3 / mu)
         # Burns are tangential: +y at the start (right), -y at the end (left), scaled for visibility.
         burn = 0.25 * max(r1, r2)
-        draw.vector(s, start, start + np.array([0.0, burn * np.sign(dv1)]), label="Δv1")
-        draw.vector(s, end, end + np.array([0.0, -burn * np.sign(dv2)]), label="Δv2")
+        if view is None:
+            draw.vector(s, start, start + np.array([0.0, burn * np.sign(dv1)]), label="Δv1")
+            draw.vector(s, end, end + np.array([0.0, -burn * np.sign(dv2)]), label="Δv2")
         s.notes = [
             f"Δv1 = {dv1:+.3f} km/s",
             f"Δv2 = {dv2:+.3f} km/s",

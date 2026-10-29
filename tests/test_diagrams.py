@@ -179,3 +179,15 @@ def test_camera_near_the_orbit_plane_warns():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         ink.diagram("orbit", ink.Elements(a=10_000, e=0.2), view=np.radians([6, 30]))
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_oblique_hohmann_diagram():
+    return ink.diagram("hohmann", 6678, 42164, view=np.radians([25, -20])).render().figure
+
+
+def test_oblique_hohmann_keeps_the_delta_v_table_without_burn_vectors():
+    plate = ink.diagram("hohmann", 6678, 42164, view=np.radians([25, -20]))
+    assert plate.scene.notes == ink.diagram("hohmann", 6678, 42164).scene.notes
+    assert not {"Δv1", "Δv2"} & set(_labels(plate))
+    assert [i.role for i in plate.scene.items if isinstance(i, Line) and i.role == st.TRANSFER]
