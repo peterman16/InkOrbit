@@ -224,3 +224,14 @@ def test_split_behind_closed_orbit_is_one_front_and_one_hidden_run():
 
 def test_split_behind_empty():
     assert geo.split_behind(np.empty((0, 3)), 1.0) == []
+
+
+def test_split_behind_grazing_the_limb():
+    # Only the middle sample lies (by 1e-16) inside the disc, behind the globe.
+    pts = np.column_stack([np.linspace(-2.0, 2.0, 3), np.full(3, 1 - 1e-16), np.full(3, -1.0)])
+    (_, a), (back, b), (_, c) = geo.split_behind(pts, 1.0)
+    assert (a, b, c) == (False, True, False)
+    assert np.all(np.abs(np.hypot(*back[[0, -1]].T) - 1.0) < 1e-9)
+    # A segment that only touches the disc has no crossing within the tolerances: fall back to its end.
+    p0, p1 = np.array([-2.0, 1 + 1e-12, -1.0]), np.array([2.0, 1 + 1e-12, -1.0])
+    assert np.array_equal(geo._crossing(p0, p1, 1.0), p1)

@@ -172,7 +172,7 @@ def _crossing(p0: np.ndarray, p1: np.ndarray, radius: float) -> np.ndarray:
             for t in ((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)):
                 if -1e-9 <= t <= 1 + 1e-9 and side * (p0[2] + t * d[2]) >= -1e-9 * radius:
                     roots.append(t)
-    return p0 + np.clip(min(roots), 0.0, 1.0) * d
+    return p0 + np.clip(min(roots, default=1.0), 0.0, 1.0) * d  # a graze the tolerances miss: end at p1
 
 
 def ring_arcs(rotation: np.ndarray, radius: float, n: int = 181) -> tuple[np.ndarray, np.ndarray]:

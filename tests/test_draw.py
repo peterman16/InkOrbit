@@ -329,7 +329,7 @@ def test_oblique_apse_line_through_the_body_is_hidden_and_the_apsis_behind_is_dr
     assert _lines(scene, st.APSE) and _lines(scene, st.HIDDEN)
     for line in _lines(scene, st.HIDDEN):
         assert np.all(np.hypot(*line.points.T) <= 1.5 + 1e-9)
-    assert _texts(scene) == ["perigee", "line of apsides"]
+    assert _texts(scene) == ["perigee"]  # no line-of-apsides label with a view
     assert _kinds(scene).count(Marker) == 1
 
 

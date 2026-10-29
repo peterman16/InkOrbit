@@ -287,7 +287,8 @@ def apsides(
     ``names`` is a body name ("earth", "moon", "sun") or a pair of words;
     anything else gives "periapsis"/"apoapsis". With ``view`` (see :func:`orbit`)
     the line runs through the globe of ``body_radius`` drawn HIDDEN instead of
-    breaking, and an apsis behind the globe gets no marker or name.
+    breaking, an apsis behind the globe gets no marker or name, and the line
+    itself is not labelled.
     """
     if isinstance(names, str):
         names = _APSIS_NAMES.get(names.lower(), ("periapsis", "apoapsis"))
@@ -305,8 +306,8 @@ def apsides(
             scene.marker(at, "dot")
             scene.label(name, at, prefer=_outward(at, "below"), priority=4)
     text = _label(line_label, "line of apsides")
-    if text and elements.is_closed:
-        scene.label(text, _place(view, elements, body_radius, (far * 0.55) * u)[0], prefer="n", priority=1)
+    if text and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
+        scene.label(text, (far * 0.55) * u, prefer="n", priority=1)
 
 
 def _straight(scene: Scene, start, end, role: str, body_radius, view, elements: Elements) -> None:
