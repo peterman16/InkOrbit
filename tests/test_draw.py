@@ -312,3 +312,38 @@ def test_orbit_without_view_is_unchanged():
     assert len(a.items) == len(b.items)
     for p, q in zip(a.items, b.items, strict=True):
         assert type(p) is type(q) and all(np.array_equal(getattr(p, k), getattr(q, k)) for k in vars(p))
+
+
+# Seen from azimuth 0 the inertial +x axis points at the viewer, tilted down by the elevation: with argp = raan = 0
+# a point at inertial (-r, 0, 0) is drawn at (0, r sin el) and lies behind the globe when r sin el < R.
+OBLIQUE = (0.2, 0.0)
+
+
+def _texts(scene):
+    return [i.text for i in scene.items if isinstance(i, Label)]
+
+
+def test_oblique_apse_line_through_the_body_is_hidden_and_the_apsis_behind_is_dropped():
+    scene = ink.Scene()
+    draw.apsides(scene, ink.Elements(a=4.0, e=0.5), body_radius=1.5, view=OBLIQUE)  # apogee 6 sin 0.2 = 1.19 < 1.5
+    assert _lines(scene, st.APSE) and _lines(scene, st.HIDDEN)
+    for line in _lines(scene, st.HIDDEN):
+        assert np.all(np.hypot(*line.points.T) <= 1.5 + 1e-9)
+    assert _texts(scene) == ["perigee", "line of apsides"]
+    assert _kinds(scene).count(Marker) == 1
+
+
+def test_oblique_nodes_drop_the_node_behind_the_globe():
+    scene = ink.Scene()
+    draw.nodes(scene, ink.Elements(a=2.0, i=0.5), body_radius=1.0, view=OBLIQUE)  # descending node at (-2, 0, 0)
+    assert _texts(scene) == ["ascending node"]
+    assert _lines(scene, st.HIDDEN)
+
+
+def test_oblique_spacecraft_behind_the_globe_is_not_drawn():
+    el = ink.Elements(a=4.0, e=0.5)
+    behind, front = ink.Scene(), ink.Scene()
+    at = draw.spacecraft(behind, el, np.pi, label="sc", view=OBLIQUE, body_radius=1.5)
+    assert behind.items == [] and np.allclose(at, [0.0, 6 * np.sin(0.2)])
+    draw.spacecraft(front, el, 0.0, label="sc", view=OBLIQUE, body_radius=1.5)
+    assert _kinds(front) == [Marker, Label]
