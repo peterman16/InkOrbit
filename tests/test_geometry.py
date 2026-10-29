@@ -185,3 +185,53 @@ def test_ring_arcs_edge_on_is_a_line():
     near, far = geo.ring_arcs(geo.view_rotation(tilt=0.0), 2.0)  # equator seen edge-on
     assert np.allclose(near[:, 1], 0.0) and np.allclose(far[:, 1], 0.0)
     assert np.isclose(np.abs(near[:, 0]).max(), 2.0)
+
+
+def _segment(start, end, n=101):
+    return np.linspace(start, end, n)
+
+
+def test_split_behind_all_front_and_all_hidden():
+    front = _segment((-3.0, 0.0, 0.5), (3.0, 2.0, 0.5))
+    ((run, hidden),) = geo.split_behind(front, 1.0)
+    assert not hidden and np.array_equal(run, front[:, :2])
+    ((run, hidden),) = geo.split_behind(_segment((-0.5, 0.0, -2.0), (0.5, 0.0, -2.0)), 1.0)
+    assert hidden and len(run) == 101
+
+
+def test_split_behind_snaps_to_the_limb_and_neighbours_share_it():
+    (back, hidden_back), (front, hidden_front) = geo.split_behind(_segment((0.5, 0.0, -2.0), (2.0, 0.0, -2.0)), 1.0)
+    assert hidden_back and not hidden_front
+    assert np.array_equal(back[-1], front[0])
+    assert abs(np.hypot(*front[0]) - 1.0) < 1e-9
+
+
+def test_split_behind_hides_a_line_through_the_body():
+    # At z = 0.5 the line is inside the unit sphere for |x| < sqrt(1 - 0.5**2).
+    runs = geo.split_behind(_segment((-3.0, 0.0, 0.5), (3.0, 0.0, 0.5)), 1.0)
+    assert [hidden for _, hidden in runs] == [False, True, False]
+    assert np.allclose(runs[1][0][[0, -1], 0], [-np.sqrt(0.75), np.sqrt(0.75)])
+
+
+def test_split_behind_closed_orbit_is_one_front_and_one_hidden_run():
+    t = np.linspace(0.0, 2 * np.pi, 361)
+    loop = np.column_stack([2 * np.cos(t), np.full_like(t, 0.3), 2 * np.sin(t)])  # passes behind once
+    (front, hidden_front), (back, hidden_back) = geo.split_behind(loop, 1.0, closed=True)
+    assert not hidden_front and hidden_back
+    assert np.array_equal(front[-1], back[0]) and np.array_equal(back[-1], front[0])
+    assert abs(np.hypot(*front[0]) - 1.0) < 1e-9
+
+
+def test_split_behind_empty():
+    assert geo.split_behind(np.empty((0, 3)), 1.0) == []
+
+
+def test_split_behind_grazing_the_limb():
+    # Only the middle sample lies (by 1e-16) inside the disc, behind the globe.
+    pts = np.column_stack([np.linspace(-2.0, 2.0, 3), np.full(3, 1 - 1e-16), np.full(3, -1.0)])
+    (_, a), (back, b), (_, c) = geo.split_behind(pts, 1.0)
+    assert (a, b, c) == (False, True, False)
+    assert np.all(np.abs(np.hypot(*back[[0, -1]].T) - 1.0) < 1e-9)
+    # A segment that only touches the disc has no crossing within the tolerances: fall back to its end.
+    p0, p1 = np.array([-2.0, 1 + 1e-12, -1.0]), np.array([2.0, 1 + 1e-12, -1.0])
+    assert np.array_equal(geo._crossing(p0, p1, 1.0), p1)
