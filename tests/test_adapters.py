@@ -111,3 +111,25 @@ def test_real_astropy_quantities():
     assert np.isclose(adapters.length_km(42_164 * u.km), 42_164)
     plate = ink.diagram("hohmann", 6678 * u.km, 42_164_000 * u.m)
     assert plate.scene.notes
+
+
+def _ring_km(n=60, r=7000.0):
+    t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    return np.column_stack([r * np.cos(t), r * np.sin(t), np.zeros(n)])
+
+
+def test_orbit_drawn_from_skyfield_like_positions():
+    ring = _ring_km()
+    fake = SimpleNamespace(position=SimpleNamespace(km=ring.T))  # Skyfield gives (3, N)
+    scene = ink.Scene()
+    ink.draw.orbit(scene, fake, arrows=())
+    assert np.allclose(np.hypot(*scene.items[0].points.T), 7000.0)
+    assert len(scene.items[0].points) == 60
+
+
+def test_orbit_drawn_from_quantity_in_metres_and_in_a_diagram():
+    u = pytest.importorskip("astropy.units")
+    scene = ink.Scene()
+    ink.draw.orbit(scene, _ring_km() * 1000 * u.m, arrows=())
+    assert np.allclose(np.hypot(*scene.items[0].points.T), 7000.0)  # read in km, not metres
+    assert ink.diagram("orbits", _ring_km() * 1000 * u.m).scene.items

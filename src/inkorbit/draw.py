@@ -17,6 +17,7 @@ import numpy as np
 from . import geometry as geo
 from . import style as st
 from . import surfaces
+from .adapters import as_positions
 from .bodies import Body
 from .elements import Elements, Frame
 from .scene import Direction, Line, Scene, point_along
@@ -64,7 +65,10 @@ def orbit(
     view: tuple[float, float] | None = None,
     body_radius: float | None = None,
 ) -> Line:
-    """Draw an orbit from :class:`Elements` or from an (N, 2) / (N, 3) array of positions.
+    """Draw an orbit from :class:`Elements` or from sampled positions.
+
+    Positions are an (N, 2) / (N, 3) array, an astropy Quantity or a Skyfield position (see
+    :func:`inkorbit.adapters.as_positions`).
 
     3D positions are projected onto their own orbital plane, periapsis to the
     right (the perifocal view). ``arrows`` are fractions of the path length
@@ -81,7 +85,7 @@ def orbit(
     if isinstance(orbit, Elements):
         points = orbit.points(frame=frame if view is None else "perifocal", max_radius=max_radius)
     else:
-        points = np.asarray(orbit, dtype=float)
+        points = as_positions(orbit)
         if view is None and points.ndim == 2 and points.shape[1] == 3:
             points = geo.project_to_plane(points)
     closed = isinstance(orbit, Elements) and orbit.is_closed
