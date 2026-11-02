@@ -44,6 +44,7 @@ def _polyline(points) -> np.ndarray:
 class Line:
     points: np.ndarray
     role: str = _style.ORBIT
+    closed: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class Fill:
     polygon: np.ndarray
     pattern: Pattern = "stipple"
     spacing_mm: Size = None
+    angle_deg: float | None = None
     seed: int | None = None  # stipple randomness; defaults to the fill's position in the scene
 
 
@@ -125,19 +127,20 @@ class Scene:
         points,
         role: str = _style.ORBIT,
         *,
+        closed: bool = False,
         arrows: Sequence[float] = (),
     ) -> Line:
         """Add a polyline. ``arrows`` places direction arrowheads at fractions of its length."""
         pts = _polyline(points)
-        line = Line(pts, role)
+        line = Line(pts, role, closed)
         self.add(line)
         for fraction in arrows:
             at, direction = point_along(pts, fraction)
             self.add(Arrowhead(at, direction))
         return line
 
-    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, seed=None) -> Fill:
-        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, seed))
+    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, angle_deg=None, seed=None) -> Fill:
+        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, angle_deg, seed))
 
     def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: Size = None) -> Arrowhead:
         return self.add(Arrowhead(_xy(at), _xy(direction), size_mm))

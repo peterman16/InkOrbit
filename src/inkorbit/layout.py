@@ -350,6 +350,8 @@ def _resolve(item, d: Drawing) -> None:
     if isinstance(item, Line):
         pen = style.pen(item.role)
         pts = d.to_page(item.points)
+        if item.closed:
+            pts = np.vstack([pts, pts[:1]])
         d.items.append(Stroke(pts, pen.width_mm, pen.dash_mm, item.role))
     elif isinstance(item, Fill):
         poly = d.to_page(item.polygon)
@@ -365,9 +367,8 @@ def _resolve(item, d: Drawing) -> None:
             if len(dots):
                 d.items.append(Dots(dots, style.stipple_dot_mm))
         elif item.pattern == "hatch":
-            for seg in patterns.hatch(
-                poly, _spacing(item.spacing_mm, style.hatch_spacing_mm, style), style.hatch_angle_deg
-            ):
+            angle = style.hatch_angle_deg if item.angle_deg is None else item.angle_deg
+            for seg in patterns.hatch(poly, _spacing(item.spacing_mm, style.hatch_spacing_mm, style), angle):
                 d.items.append(Stroke(seg, style.hatch_pen_mm))
         else:
             raise ValueError(f"unknown fill pattern {item.pattern!r}")

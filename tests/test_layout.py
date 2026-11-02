@@ -57,6 +57,23 @@ def test_star_marker_is_a_ten_point_solid_around_its_position():
     assert np.allclose(np.hypot(*(star.polygon - d.to_page((1, 1))).T).max(), d.style.marker_mm)
 
 
+def test_closed_line_ends_at_its_first_point():
+    scene = ink.Scene()
+    scene.line([[0, 0], [4, 0], [4, 3]], closed=True)
+    pts = ink.layout(scene).items[0].points
+    assert len(pts) == 4 and np.allclose(pts[-1], pts[0])
+
+
+def test_hatch_angle_deg_sets_the_direction_of_the_hatch_segments():
+    scene = ink.Scene()
+    scene.fill([[0, 0], [10, 0], [10, 10], [0, 10]], "hatch", angle_deg=30)
+    segs = [i.points for i in ink.layout(scene).items if isinstance(i, Stroke)]
+    assert segs
+    for p in segs:
+        dx, dy = p[-1] - p[0]
+        assert np.isclose(np.degrees(np.arctan2(dy, dx)) % 180, 30)
+
+
 def test_sizes_given_by_name_are_resolved_from_the_style():
     def sizes(style):
         scene = _scene()
