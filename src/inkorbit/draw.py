@@ -41,18 +41,11 @@ SYMBOL_HEIGHT_MM = 3.2
 # A line or vector that meets a globe stops this far outside its radius.
 BODY_GAP = 1.08
 
-# Sentinel meaning "use the conventional label for this thing".
-DEFAULT = "__default__"
-
 _APSIS_NAMES = {
     "earth": ("perigee", "apogee"),
     "moon": ("perilune", "apolune"),
     "sun": ("perihelion", "aphelion"),
 }
-
-
-def _label(text, default: str | None) -> str | None:
-    return default if text == DEFAULT else text
 
 
 def orbit(
@@ -288,7 +281,7 @@ def apsides(
     body_radius: float | None = None,
     names: tuple[str, str] | str = "earth",
     frame: Frame = "perifocal",
-    line_label: str | None = DEFAULT,
+    line_label: str | None = "line of apsides",
     overshoot: float = 0.12,
     view: tuple[float, float] | None = None,
 ) -> None:
@@ -315,9 +308,8 @@ def apsides(
         if not hidden:
             scene.marker(at, "dot")
             scene.label(name, at, prefer=_outward(at), priority=4)
-    text = _label(line_label, "line of apsides")
-    if text and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
-        scene.label(text, (far * 0.55) * u, prefer="n", priority=1)
+    if line_label and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
+        scene.label(line_label, (far * 0.55) * u, prefer="n", priority=1)
 
 
 def _straight(scene: Scene, start, end, role: str, body_radius, view, elements: Elements) -> None:

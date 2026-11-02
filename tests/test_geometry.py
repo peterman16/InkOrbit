@@ -9,14 +9,6 @@ def _area(poly):
     return 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
-def test_ellipse_apsides():
-    pts = geo.ellipse(2.0, 0.5)
-    r = np.hypot(pts[:, 0], pts[:, 1])
-    assert np.isclose(r.min(), 1.0, rtol=1e-4)
-    assert np.isclose(r.max(), 3.0, rtol=1e-4)
-    assert np.allclose(pts[0], [1.0, 0.0])
-
-
 def test_night_side_half_disc_when_sun_is_sideways():
     night = geo.night_side(np.array([-1.0, 0.0, 0.0]))
     assert np.isclose(_area(night), np.pi / 2, rtol=1e-3)

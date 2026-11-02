@@ -5,26 +5,6 @@ from __future__ import annotations
 import numpy as np
 
 
-def conic(p: float, e: float, nu: np.ndarray | None = None, n: int = 721) -> np.ndarray:
-    """Points of a conic in the perifocal frame (periapsis along +x).
-
-    ``p`` is the semi-latus rectum and ``nu`` the true anomalies in radians.
-    By default a full ellipse is sampled; for e >= 1 pass the anomaly range.
-    """
-    if nu is None:
-        if e >= 1:
-            raise ValueError("open conics need an explicit range of true anomaly")
-        nu = np.linspace(0.0, 2 * np.pi, n)
-    nu = np.asarray(nu, dtype=float)
-    r = p / (1 + e * np.cos(nu))
-    return np.column_stack([r * np.cos(nu), r * np.sin(nu)])
-
-
-def ellipse(a: float, e: float, n: int = 721) -> np.ndarray:
-    """A closed Keplerian ellipse with the focus at the origin."""
-    return conic(a * (1 - e**2), e, n=n)
-
-
 def circle(center: tuple[float, float], radius: float, n: int = 361) -> np.ndarray:
     return arc(center, radius, 0.0, 2 * np.pi, n)
 
