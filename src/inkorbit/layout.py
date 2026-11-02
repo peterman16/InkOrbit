@@ -26,6 +26,10 @@ class Page:
     height_mm: float
     margin_mm: float = 8.0
 
+    def __post_init__(self):
+        if not (np.isfinite([self.width_mm, self.height_mm]).all() and min(self.width_mm, self.height_mm) > 0):
+            raise ValueError(f"page size must be finite and positive, got {self.width_mm} x {self.height_mm} mm")
+
 
 PAGES: dict[str, Page] = {
     "figure": Page(160, 120),
@@ -321,6 +325,15 @@ def _frame(d: Drawing, scene: Scene) -> None:
             _letter_into(d, scene.units, np.array([x1 + 1.5, y0 - 1.5]), h, "left", "top", 0.0, pen)
 
 
+def _spacing(spacing: float | None, default: float, style: Style) -> float:
+    """A fill's spacing in mm: ``default`` if None, else ``spacing`` if finite and at least the style's minimum."""
+    if spacing is None:
+        return default
+    if not np.isfinite(spacing) or spacing < style.min_spacing_mm:
+        raise ValueError(f"fill spacing must be finite and at least {style.min_spacing_mm} mm, got {spacing}")
+    return spacing
+
+
 def _resolve(item, d: Drawing) -> None:
     style = d.style
     if isinstance(item, Line):
@@ -334,12 +347,14 @@ def _resolve(item, d: Drawing) -> None:
         if item.pattern in ("solid", "paper"):
             d.items.append(Solid(poly, paper=item.pattern == "paper"))
         elif item.pattern == "stipple":
-            dots = patterns.stipple(poly, item.spacing_mm or style.stipple_spacing_mm, seed=item.seed or 0)
+            dots = patterns.stipple(
+                poly, _spacing(item.spacing_mm, style.stipple_spacing_mm, style), seed=item.seed or 0
+            )
             if len(dots):
                 d.items.append(Dots(dots, style.stipple_dot_mm))
         elif item.pattern == "hatch":
             angle = style.hatch_angle_deg if item.angle_deg is None else item.angle_deg
-            for seg in patterns.hatch(poly, item.spacing_mm or style.hatch_spacing_mm, angle):
+            for seg in patterns.hatch(poly, _spacing(item.spacing_mm, style.hatch_spacing_mm, style), angle):
                 d.items.append(Stroke(seg, style.hatch_pen_mm))
         else:
             raise ValueError(f"unknown fill pattern {item.pattern!r}")

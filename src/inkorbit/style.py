@@ -85,6 +85,7 @@ class Style:
     crater_shadow_stipple_mm: float = 0.3  # stipple in crater shadow crescents
     ring_stipple_mm: tuple = (0.9, 0.6, 0.38)  # stipple spacing of light, medium and dense ring tones
     hatch_spacing_mm: float = 0.9
+    min_spacing_mm: float = 0.05  # finest stipple or hatch spacing accepted: below it a fill is millions of marks
     hatch_angle_deg: float = 45.0
     hatch_pen_mm: float = 0.18
 
