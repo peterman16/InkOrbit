@@ -14,7 +14,7 @@ from .printed import DEFAULT_PRINTED, Printed, apply
 from .render import render
 from .render.matplotlib import bitmap_figure
 from .scene import Scene
-from .style import Style
+from .style import INK, PAPER, Style
 
 
 class Plate:
@@ -53,10 +53,9 @@ class Plate:
     def _printed_figure(self, dpi: int):
         """The printed bitmap of this plate as a figure holding exactly its pixels."""
         rendered = self.render()
-        style = rendered.drawing.style
         ink = apply(rendered.to_array(dpi), dpi, self.printed)
-        colours = np.array([to_rgb(style.paper), to_rgb(style.ink)])  # paper first: indexed by the bool mask
-        return bitmap_figure(np.rint(colours[ink.astype(int)] * 255).astype(np.uint8), dpi, style.paper)
+        colours = np.array([to_rgb(PAPER), to_rgb(INK)])  # paper first: indexed by the bool mask
+        return bitmap_figure(np.rint(colours[ink.astype(int)] * 255).astype(np.uint8), dpi, PAPER)
 
     def savefig(self, path, dpi: int = 300, **kwargs) -> None:
         if self.printed is None:

@@ -49,6 +49,50 @@ def test_items_resolve_to_ink_primitives():
     assert kinds == {Stroke, Solid, Dots}
 
 
+def test_star_marker_is_a_ten_point_solid_around_its_position():
+    scene = _scene()
+    scene.marker((1, 1), "star")
+    d = ink.layout(scene)
+    (star,) = [i for i in d.items if isinstance(i, Solid) and len(i.polygon) == 10]
+    assert np.allclose(np.hypot(*(star.polygon - d.to_page((1, 1))).T).max(), d.style.marker_mm)
+
+
+def test_closed_line_ends_at_its_first_point():
+    scene = ink.Scene()
+    scene.line([[0, 0], [4, 0], [4, 3]], closed=True)
+    pts = ink.layout(scene).items[0].points
+    assert len(pts) == 4 and np.allclose(pts[-1], pts[0])
+
+
+def test_hatch_angle_deg_sets_the_direction_of_the_hatch_segments():
+    scene = ink.Scene()
+    scene.fill([[0, 0], [10, 0], [10, 10], [0, 10]], "hatch", angle_deg=30)
+    segs = [i.points for i in ink.layout(scene).items if isinstance(i, Stroke)]
+    assert segs
+    for p in segs:
+        dx, dy = p[-1] - p[0]
+        assert np.isclose(np.degrees(np.arctan2(dy, dx)) % 180, 30)
+
+
+def test_sizes_given_by_name_are_resolved_from_the_style():
+    def sizes(style):
+        scene = _scene()
+        scene.marker((1, 1), size_mm="station_marker_mm")
+        scene.text("H", (2, 2), height_mm="symbol_height_mm")
+        d = ink.layout(scene, style=style)
+        (dot,) = [i for i in d.items if isinstance(i, Solid)]
+        letter = np.vstack([i.points for i in d.items if isinstance(i, Stroke) and i.role is None])
+        return np.ptp(dot.polygon[:, 0]), np.ptp(letter[:, 1])
+
+    assert sizes(ink.Style()) == pytest.approx((1.4, 3.2))
+    big = ink.Style(station_marker_mm=2.5, symbol_height_mm=5.0)
+    assert sizes(big) == pytest.approx((2.5, 5.0))
+    scene = _scene()
+    scene.marker((0, 0), size_mm="nope")
+    with pytest.raises(ValueError, match="no size named"):
+        ink.layout(scene)
+
+
 def test_unknown_role_and_page():
     scene = ink.Scene()
     scene.line([[0, 0], [1, 1]], "nonsense")

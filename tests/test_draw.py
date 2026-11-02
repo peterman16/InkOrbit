@@ -1,3 +1,5 @@
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -5,6 +7,7 @@ import inkorbit as ink
 from inkorbit import draw
 from inkorbit import geometry as geo
 from inkorbit import style as st
+from inkorbit.layout import Dots
 from inkorbit.scene import Arrowhead, Fill, Label, Line, Marker
 
 ELLIPSE = ink.Elements(a=2.6, e=0.55, nu=np.radians(110))
@@ -151,38 +154,6 @@ def _area(poly):
     return abs(geo._signed_area(poly))
 
 
-def _strip(y):  # area of the unit disc below the chord at height y, plus pi/2 (analytic orthographic belt area)
-    return y * np.sqrt(1 - y * y) + np.arcsin(y)
-
-
-def test_equatorial_belt_at_zero_tilt_is_the_analytic_strip():
-    (poly,) = geo.belt_polygons(geo.view_rotation(0.0), 7, 17)
-    expected = _strip(np.sin(np.radians(17))) - _strip(np.sin(np.radians(7)))  # y = sin(lat) when seen edge-on
-    assert _area(poly) == pytest.approx(expected, rel=2e-3)
-
-
-def test_belt_polygons_stay_in_the_disc_for_every_view():
-    for tilt in np.radians([0, 20, 60, 89, 90, -90, -45]):
-        for belt in [(7, 17), (-20, -7), (45, 90), (-90, -45), (20, 35), (-7, 7)]:
-            for poly in geo.belt_polygons(geo.view_rotation(tilt, 0.7), *belt):
-                assert np.all(np.hypot(*poly.T) <= 1 + 1e-9)
-
-
-def test_pole_on_cap_is_a_disc_and_pole_on_belt_is_a_ring():
-    pole_on = geo.view_rotation(np.pi / 2)
-    (cap,) = geo.belt_polygons(pole_on, 45, 90)
-    assert np.hypot(*cap.T).max() == pytest.approx(np.cos(np.radians(45)))
-    assert geo.belt_polygons(pole_on, -90, -45) == []  # the far pole is hidden
-    (ring,) = geo.belt_polygons(pole_on, 20, 35)
-    assert _area(ring) == pytest.approx(np.pi * (np.cos(np.radians(20)) ** 2 - np.cos(np.radians(35)) ** 2), rel=2e-3)
-
-
-def test_belt_crossing_the_limb_is_one_polygon_with_both_edges():
-    (poly,) = geo.belt_polygons(geo.view_rotation(np.radians(20)), 45, 90)
-    assert np.isclose(np.hypot(*poly.T).max(), 1.0)  # reaches the limb
-    assert poly[:, 1].max() > 0.9  # and the cap near the pole
-
-
 def test_belts_stipple_jupiter_but_not_neptune():
     def fills(name):
         s = ink.Scene()
@@ -213,14 +184,14 @@ def _fills(name, spacing, spin=0.0):
 
 
 def test_moon_regions_are_stippled_in_two_tones_and_mars_has_none():
-    for spacing in (st.DEFAULT_STYLE.region_stipple_mm, st.DEFAULT_STYLE.region_core_stipple_mm):
+    for spacing in ("region_stipple_mm", "region_core_stipple_mm"):
         assert _fills("moon", spacing)
         assert not _fills("mars", spacing)  # no region data for Mars
 
 
 @pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
 def test_rocky_bodies_get_crater_shadows_and_rims(name):
-    assert _fills(name, st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+    assert _fills(name, "crater_shadow_stipple_mm")
     s = ink.Scene()
     draw.body(s, 1.0, body=name, surface=True)
     assert _surface_lines(s)
@@ -228,12 +199,23 @@ def test_rocky_bodies_get_crater_shadows_and_rims(name):
 
 def test_crater_shadows_stay_small_across_the_antimeridian():
     # Facing longitude 180: a shadow ring crossing it must not become a band around the globe.
-    shadows = _fills("moon", st.DEFAULT_STYLE.crater_shadow_stipple_mm, spin=np.pi)
+    shadows = _fills("moon", "crater_shadow_stipple_mm", spin=np.pi)
     assert shadows and max(_area(f.polygon) for f in shadows) < 0.05
 
 
+def _dots(scene, style):
+    return sum(len(i.points) for i in ink.layout(scene, style=style).items if isinstance(i, Dots))
+
+
+def test_a_custom_style_changes_the_maria_stipple():
+    s = ink.Scene()
+    draw.body(s, 1.0, body="moon", surface=True, sun=None)
+    coarse = dataclasses.replace(st.DEFAULT_STYLE, region_stipple_mm=1.4)
+    assert _dots(s, coarse) < _dots(s, st.DEFAULT_STYLE)
+
+
 def test_some_crater_floors_are_cut_out_of_the_maria():
-    maria = _fills("moon", st.DEFAULT_STYLE.region_stipple_mm)
+    maria = _fills("moon", "region_stipple_mm")
     assert any(len(f.polygon) > 1 + len(np.unique(f.polygon, axis=0)) for f in maria)  # a hole repeats the start
 
 
@@ -246,8 +228,15 @@ def test_rocky_globe_renders_the_same_twice():
     assert np.array_equal(png(), png())
 
 
+RING_TONES = (
+    "ring_light_stipple_mm",
+    "ring_medium_stipple_mm",
+    "ring_dense_stipple_mm",
+)
+
+
 def _ring_stipples(scene):
-    return [i for i in scene.items if isinstance(i, Fill) and i.spacing_mm in st.DEFAULT_STYLE.ring_stipple_mm]
+    return [i for i in scene.items if isinstance(i, Fill) and i.spacing_mm in RING_TONES]
 
 
 def test_saturn_surface_adds_ring_bands_and_other_bodies_are_unchanged():
@@ -347,3 +336,15 @@ def test_oblique_spacecraft_behind_the_globe_is_not_drawn():
     assert behind.items == [] and np.allclose(at, [0.0, 6 * np.sin(0.2)])
     draw.spacecraft(front, el, 0.0, label="sc", view=OBLIQUE, body_radius=1.5)
     assert _kinds(front) == [Marker, Label]
+
+
+def test_oblique_orbit_label_slides_only_along_the_front():
+    # Circular equatorial orbit of radius 2 seen at elevation 0.3, azimuth 0: the half near nu = pi is behind the
+    # unit globe, so its view point has |xy| < 1 and z < 0 (see the test above).
+    scene = ink.Scene()
+    draw.orbit(scene, ink.Elements(a=2.0), view=(0.3, 0.0), body_radius=1.0, arrows=(), label="x", label_at=0.1)
+    (label,) = [i for i in scene.items if isinstance(i, Label)]
+    (hidden,) = _lines(scene, st.HIDDEN)
+    assert len(label.alternatives) > 0
+    lo, hi = hidden.points.min(axis=0), hidden.points.max(axis=0)
+    assert not any(np.all((a > lo) & (a < hi)) for a in label.alternatives)

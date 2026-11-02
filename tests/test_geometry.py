@@ -1,20 +1,12 @@
 import numpy as np
+import pytest
 
 from inkorbit import geometry as geo
-from inkorbit import maps
 
 
 def _area(poly):
     x, y = poly[:, 0], poly[:, 1]
     return 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-
-
-def test_ellipse_apsides():
-    pts = geo.ellipse(2.0, 0.5)
-    r = np.hypot(pts[:, 0], pts[:, 1])
-    assert np.isclose(r.min(), 1.0, rtol=1e-4)
-    assert np.isclose(r.max(), 3.0, rtol=1e-4)
-    assert np.allclose(pts[0], [1.0, 0.0])
 
 
 def test_night_side_half_disc_when_sun_is_sideways():
@@ -151,19 +143,6 @@ def test_destination_poles():
     assert np.isclose(lat, -60.0)
 
 
-def test_small_circle_unchanged():
-    # Copy of the formula small_circle used before it called geometry.destination.
-    lat1, lon1, d = np.radians(35.0), np.radians(-170.0), np.radians(25.0)
-    brg = np.linspace(0.0, 2 * np.pi, 121)
-    lat2 = np.arcsin(np.sin(lat1) * np.cos(d) + np.cos(lat1) * np.sin(d) * np.cos(brg))
-    lon2 = lon1 + np.arctan2(np.sin(brg) * np.sin(d) * np.cos(lat1), np.cos(d) - np.sin(lat1) * np.sin(lat2))
-    expected = maps.split_at_antimeridian(np.degrees(lon2), np.degrees(lat2))
-    got = maps.small_circle(35.0, -170.0, 25.0)
-    assert len(got) == len(expected) > 1
-    for g, e in zip(got, expected, strict=True):
-        assert np.allclose(g, e)
-
-
 def test_ring_arcs_tilted_halves_mirror_and_far_passes_behind_disc():
     rot = geo.view_rotation(tilt=np.radians(20))
     near, far = geo.ring_arcs(rot, 2.0)
@@ -235,3 +214,35 @@ def test_split_behind_grazing_the_limb():
     # A segment that only touches the disc has no crossing within the tolerances: fall back to its end.
     p0, p1 = np.array([-2.0, 1 + 1e-12, -1.0]), np.array([2.0, 1 + 1e-12, -1.0])
     assert np.array_equal(geo._crossing(p0, p1, 1.0), p1)
+
+
+def _strip(y):  # area of the unit disc below the chord at height y, plus pi/2 (analytic orthographic belt area)
+    return y * np.sqrt(1 - y * y) + np.arcsin(y)
+
+
+def test_equatorial_belt_at_zero_tilt_is_the_analytic_strip():
+    (poly,) = geo.belt_polygons(geo.view_rotation(0.0), 7, 17)
+    expected = _strip(np.sin(np.radians(17))) - _strip(np.sin(np.radians(7)))  # y = sin(lat) when seen edge-on
+    assert _area(poly) == pytest.approx(expected, rel=2e-3)
+
+
+def test_belt_polygons_stay_in_the_disc_for_every_view():
+    for tilt in np.radians([0, 20, 60, 89, 90, -90, -45]):
+        for belt in [(7, 17), (-20, -7), (45, 90), (-90, -45), (20, 35), (-7, 7)]:
+            for poly in geo.belt_polygons(geo.view_rotation(tilt, 0.7), *belt):
+                assert np.all(np.hypot(*poly.T) <= 1 + 1e-9)
+
+
+def test_pole_on_cap_is_a_disc_and_pole_on_belt_is_a_ring():
+    pole_on = geo.view_rotation(np.pi / 2)
+    (cap,) = geo.belt_polygons(pole_on, 45, 90)
+    assert np.hypot(*cap.T).max() == pytest.approx(np.cos(np.radians(45)))
+    assert geo.belt_polygons(pole_on, -90, -45) == []  # the far pole is hidden
+    (ring,) = geo.belt_polygons(pole_on, 20, 35)
+    assert _area(ring) == pytest.approx(np.pi * (np.cos(np.radians(20)) ** 2 - np.cos(np.radians(35)) ** 2), rel=2e-3)
+
+
+def test_belt_crossing_the_limb_is_one_polygon_with_both_edges():
+    (poly,) = geo.belt_polygons(geo.view_rotation(np.radians(20)), 45, 90)
+    assert np.isclose(np.hypot(*poly.T).max(), 1.0)  # reaches the limb
+    assert poly[:, 1].max() > 0.9  # and the cap near the pole

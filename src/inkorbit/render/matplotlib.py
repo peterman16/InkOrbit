@@ -15,6 +15,7 @@ from matplotlib.patches import Polygon
 from matplotlib.transforms import IdentityTransform
 
 from ..layout import Dots, Drawing, Solid, Stroke
+from ..style import INK, PAPER
 
 PT_PER_MM = 72 / 25.4
 MAX_DPI, MAX_PIXELS = 2400, 2 * 10**8  # generous: A4 at 1200 dpi is 1.6e8 pixels
@@ -38,7 +39,7 @@ class RenderedFigure:
         pixels = page.width_mm * page.height_mm / 25.4**2 * dpi**2
         if pixels > MAX_PIXELS:
             raise ValueError(f"{pixels:.3g} pixels at {dpi} dpi exceeds the limit of {MAX_PIXELS}; lower the dpi")
-        kwargs.setdefault("facecolor", self.drawing.style.paper)
+        kwargs.setdefault("facecolor", PAPER)
         self.figure.savefig(path, dpi=dpi, **kwargs)
 
     def to_png(self, dpi: int = 150) -> bytes:
@@ -57,13 +58,13 @@ class RenderedFigure:
 
 class MatplotlibRenderer:
     def draw(self, drawing: Drawing) -> RenderedFigure:
-        page, style = drawing.page, drawing.style
-        fig = Figure(figsize=(page.width_mm / 25.4, page.height_mm / 25.4), facecolor=style.paper)
+        page = drawing.page
+        fig = Figure(figsize=(page.width_mm / 25.4, page.height_mm / 25.4), facecolor=PAPER)
         ax = fig.add_axes((0, 0, 1, 1))
         ax.set_xlim(0, page.width_mm)
         ax.set_ylim(0, page.height_mm)
         ax.set_axis_off()
-        ax.set_facecolor(style.paper)
+        ax.set_facecolor(PAPER)
 
         solid_batch: list[Stroke] = []
 
@@ -77,7 +78,7 @@ class MatplotlibRenderer:
 
         def flush():
             if solid_batch:
-                add(_collection(solid_batch, style.ink, None))
+                add(_collection(solid_batch, INK, None))
                 solid_batch.clear()
 
         # Consecutive solid strokes are batched; anything else keeps its order.
@@ -87,13 +88,13 @@ class MatplotlibRenderer:
                 continue
             flush()
             if isinstance(item, Stroke):
-                add(_collection([item], style.ink, item.dash_mm))
+                add(_collection([item], INK, item.dash_mm))
             elif isinstance(item, Solid):
-                color = style.paper if item.paper else style.ink
+                color = PAPER if item.paper else INK
                 layer += item.paper
                 add(Polygon(item.polygon, closed=True, facecolor=color, edgecolor="none", linewidth=0))
             elif isinstance(item, Dots):
-                add(_dots(item, style.ink, ax))
+                add(_dots(item, INK, ax))
             else:
                 raise TypeError(f"cannot draw {type(item).__name__}")
         flush()

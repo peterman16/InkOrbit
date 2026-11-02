@@ -5,26 +5,6 @@ from __future__ import annotations
 import numpy as np
 
 
-def conic(p: float, e: float, nu: np.ndarray | None = None, n: int = 721) -> np.ndarray:
-    """Points of a conic in the perifocal frame (periapsis along +x).
-
-    ``p`` is the semi-latus rectum and ``nu`` the true anomalies in radians.
-    By default a full ellipse is sampled; for e >= 1 pass the anomaly range.
-    """
-    if nu is None:
-        if e >= 1:
-            raise ValueError("open conics need an explicit range of true anomaly")
-        nu = np.linspace(0.0, 2 * np.pi, n)
-    nu = np.asarray(nu, dtype=float)
-    r = p / (1 + e * np.cos(nu))
-    return np.column_stack([r * np.cos(nu), r * np.sin(nu)])
-
-
-def ellipse(a: float, e: float, n: int = 721) -> np.ndarray:
-    """A closed Keplerian ellipse with the focus at the origin."""
-    return conic(a * (1 - e**2), e, n=n)
-
-
 def circle(center: tuple[float, float], radius: float, n: int = 361) -> np.ndarray:
     return arc(center, radius, 0.0, 2 * np.pi, n)
 
@@ -81,7 +61,7 @@ def view_rotation(tilt: float = 0.0, spin: float = 0.0) -> np.ndarray:
     to_view = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
     ct, st = np.cos(tilt), np.sin(tilt)
     tilt_m = np.array([[1.0, 0.0, 0.0], [0.0, ct, -st], [0.0, st, ct]])
-    return tilt_m @ to_view @ _r3(spin)
+    return tilt_m @ to_view @ r3(spin)
 
 
 def orbit_view_rotation(i: float, raan: float, argp: float, in_plane: float = 0.0) -> np.ndarray:
@@ -93,13 +73,19 @@ def orbit_view_rotation(i: float, raan: float, argp: float, in_plane: float = 0.
     """
     ci, si = np.cos(i), np.sin(i)
     r1 = np.array([[1.0, 0.0, 0.0], [0.0, ci, si], [0.0, -si, ci]])
-    return _r3(argp - in_plane) @ r1 @ _r3(raan)
+    return r3(argp - in_plane) @ r1 @ r3(raan)
 
 
-def _r3(angle: float) -> np.ndarray:
+def r3(angle: float) -> np.ndarray:
     """Frame rotation by ``angle`` about z (coordinates of the same vector in the turned frame)."""
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _view_to_lonlat(v: np.ndarray, rotation: np.ndarray) -> np.ndarray:
+    """(N, 2) body longitude and latitude in degrees of unit view-frame vectors."""
+    x, y, z = (v @ rotation).T
+    return np.degrees(np.column_stack([np.arctan2(y, x), np.arcsin(np.clip(z, -1.0, 1.0))]))
 
 
 def lat_lon_to_view(lat: np.ndarray, lon: np.ndarray, rotation: np.ndarray) -> np.ndarray:
@@ -139,7 +125,7 @@ def split_behind(points3: np.ndarray, radius: float, closed: bool = False) -> li
         pts = pts[:-1]
     if len(pts) < 2:
         return []
-    hidden = _behind(pts, radius)
+    hidden = behind(pts, radius)
     if hidden.all() or not hidden.any():
         return [((np.vstack([pts, pts[:1]]) if closed else pts)[:, :2], bool(hidden[0]))]
     if closed:
@@ -155,10 +141,20 @@ def split_behind(points3: np.ndarray, radius: float, closed: bool = False) -> li
     ]
 
 
-def _behind(points3: np.ndarray, radius: float) -> np.ndarray:
+def behind(points3: np.ndarray, radius: float) -> np.ndarray:
     """Mask of (N, 3) view points hidden by a globe of ``radius`` at the origin: in its disc, behind its near face."""
     rho2 = points3[:, 0] ** 2 + points3[:, 1] ** 2
     return (rho2 < radius**2) & (points3[:, 2] < np.sqrt(np.maximum(radius**2 - rho2, 0.0)))
+
+
+def line_circle_roots(p: np.ndarray, d: np.ndarray, radius: float) -> tuple[float, ...]:
+    """Parameters t (ascending) where the line ``p + t d`` meets the circle (or sphere) of ``radius`` at the origin."""
+    a, b, c = d @ d, 2 * p @ d, p @ p - radius**2
+    disc = b * b - 4 * a * c
+    if a <= 0 or disc < 0:
+        return ()
+    root = np.sqrt(disc)
+    return (-b - root) / (2 * a), (-b + root) / (2 * a)
 
 
 def _crossing(p0: np.ndarray, p1: np.ndarray, radius: float) -> np.ndarray:
@@ -166,12 +162,9 @@ def _crossing(p0: np.ndarray, p1: np.ndarray, radius: float) -> np.ndarray:
     d = p1 - p0
     roots = []
     for k, side in ((2, -1.0), (3, 1.0)):  # |xy| = R (the disc edge), then |xyz| = R (the sphere)
-        a, b, c = d[:k] @ d[:k], 2 * p0[:k] @ d[:k], p0[:k] @ p0[:k] - radius**2
-        disc = b * b - 4 * a * c
-        if a > 0 and disc >= 0:
-            for t in ((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)):
-                if -1e-9 <= t <= 1 + 1e-9 and side * (p0[2] + t * d[2]) >= -1e-9 * radius:
-                    roots.append(t)
+        for t in line_circle_roots(p0[:k], d[:k], radius):
+            if -1e-9 <= t <= 1 + 1e-9 and side * (p0[2] + t * d[2]) >= -1e-9 * radius:
+                roots.append(t)
     return p0 + np.clip(min(roots, default=1.0), 0.0, 1.0) * d  # a graze the tolerances miss: end at p1
 
 
@@ -396,8 +389,7 @@ def belt_polygons(rotation: np.ndarray, south, north, n: int = 361) -> list[np.n
     south, north = (np.broadcast_to(np.asarray(e, float), t.shape) for e in (south, north))
 
     def in_belt(v: np.ndarray) -> np.ndarray:
-        x, y, z = (v @ rotation).T  # body frame
-        lon, lat = np.degrees(np.arctan2(y, x)), np.degrees(np.arcsin(np.clip(z, -1.0, 1.0)))
+        lon, lat = _view_to_lonlat(v, rotation).T
         lon_t = np.degrees(t)
         return (np.interp(lon, lon_t, south, period=360) <= lat) & (lat <= np.interp(lon, lon_t, north, period=360))
 
@@ -440,9 +432,7 @@ def ring_polygons(rotation: np.ndarray, lonlat_ring) -> list[np.ndarray]:
     pts = lat_lon_to_view(np.radians(dense[:, 1]), np.radians(dense[:, 0]), rotation)
 
     def inside(v: np.ndarray) -> np.ndarray:
-        x, y, z = (v @ rotation).T  # body frame
-        lonlat = np.column_stack([np.arctan2(y, x), np.arcsin(np.clip(z, -1.0, 1.0))])
-        return points_in_polygon(np.degrees(lonlat), ring)
+        return points_in_polygon(_view_to_lonlat(v, rotation), ring)
 
     if np.all(pts[:, 2] >= 0):
         return [np.vstack([pts[:, :2], pts[:1, :2]])]

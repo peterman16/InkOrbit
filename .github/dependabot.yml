@@ -6,5 +6,9 @@ updates:
       interval: weekly
   - package-ecosystem: pip
     directory: /
+    # ci/adapters-constraints.txt pins the old stack hapsira and poliastro need
+    # (matplotlib < 3.8, Python 3.10); bumping it would stop us testing them.
+    exclude-paths:
+      - "ci/**"
     schedule:
       interval: weekly

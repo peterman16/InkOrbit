@@ -19,6 +19,9 @@ class Pen:
     dash_mm: tuple[float, ...] | None = None
 
 
+INK = "#000000"  # black ink on white paper, always: tone comes from hatching and stipple
+PAPER = "#ffffff"
+
 # Line roles. Diagrams say *what* a line is; the style decides how it looks.
 ORBIT = "orbit"  # the subject of the figure
 TRANSFER = "transfer"  # transfer arcs, future or alternative paths
@@ -60,8 +63,6 @@ class Style:
     Use :func:`dataclasses.replace` (or :meth:`with_pen`) to derive variations.
     """
 
-    ink: str = "#000000"
-    paper: str = "#ffffff"
     pens: Mapping[str, Pen] = field(default_factory=lambda: MappingProxyType(dict(_DEFAULT_PENS)))
 
     # Lettering (Hershey single-stroke vector fonts).
@@ -76,6 +77,10 @@ class Style:
     arrow_length_mm: float = 3.4
     arrow_width_mm: float = 1.5
     marker_mm: float = 1.3
+    spacecraft_marker_mm: float = 1.8
+    station_marker_mm: float = 1.4
+    angle_arrow_mm: float = 2.0
+    symbol_height_mm: float = 3.2  # lettering of symbols such as angle names
 
     # Fill patterns.
     stipple_spacing_mm: float = 0.55
@@ -83,7 +88,11 @@ class Style:
     region_stipple_mm: float = 0.7  # base tone of dark regions such as lunar maria
     region_core_stipple_mm: float = 0.4  # extra stipple over the regions' cores; together they grade the tone
     crater_shadow_stipple_mm: float = 0.3  # stipple in crater shadow crescents
-    ring_stipple_mm: tuple = (0.9, 0.6, 0.38)  # stipple spacing of light, medium and dense ring tones
+    ring_light_stipple_mm: float = 0.9  # Saturn's ring tones, light to dense
+    ring_medium_stipple_mm: float = 0.6
+    ring_dense_stipple_mm: float = 0.38
+    land_stipple_mm: float = 0.7  # land on maps
+    stipple_floor_mm: float = 0.15  # a fill too small for a few dots is stippled finer, down to this spacing
     hatch_spacing_mm: float = 0.9
     min_spacing_mm: float = 0.05  # finest stipple or hatch spacing accepted: below it a fill is millions of marks
     hatch_angle_deg: float = 45.0

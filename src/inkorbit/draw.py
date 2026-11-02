@@ -17,6 +17,7 @@ import numpy as np
 from . import geometry as geo
 from . import style as st
 from . import surfaces
+from .adapters import as_positions
 from .bodies import Body
 from .elements import Elements, Frame
 from .scene import Direction, Line, Scene, point_along
@@ -34,21 +35,14 @@ __all__ = [
     "velocity_vector",
 ]
 
-# Greek symbols on angles read better a little larger than running text.
-SYMBOL_HEIGHT_MM = 3.2
-
-# Sentinel meaning "use the conventional label for this thing".
-DEFAULT = "__default__"
+# A line or vector that meets a globe stops this far outside its radius.
+BODY_GAP = 1.08
 
 _APSIS_NAMES = {
     "earth": ("perigee", "apogee"),
     "moon": ("perilune", "apolune"),
     "sun": ("perihelion", "aphelion"),
 }
-
-
-def _label(text, default: str | None) -> str | None:
-    return default if text == DEFAULT else text
 
 
 def orbit(
@@ -64,7 +58,10 @@ def orbit(
     view: tuple[float, float] | None = None,
     body_radius: float | None = None,
 ) -> Line:
-    """Draw an orbit from :class:`Elements` or from an (N, 2) / (N, 3) array of positions.
+    """Draw an orbit from :class:`Elements` or from sampled positions.
+
+    Positions are an (N, 2) / (N, 3) array, an astropy Quantity or a Skyfield position (see
+    :func:`inkorbit.adapters.as_positions`).
 
     3D positions are projected onto their own orbital plane, periapsis to the
     right (the perifocal view). ``arrows`` are fractions of the path length
@@ -81,7 +78,7 @@ def orbit(
     if isinstance(orbit, Elements):
         points = orbit.points(frame=frame if view is None else "perifocal", max_radius=max_radius)
     else:
-        points = np.asarray(orbit, dtype=float)
+        points = as_positions(orbit)
         if view is None and points.ndim == 2 and points.shape[1] == 3:
             points = geo.project_to_plane(points)
     closed = isinstance(orbit, Elements) and orbit.is_closed
@@ -93,14 +90,17 @@ def orbit(
         line = next((ln for ln in lines if ln.role == role), lines[0])
         for fraction in arrows:
             at, direction = point_along(points3, fraction)
-            if not geo._behind(at[None], body_radius or 0.0)[0]:
+            if not geo.behind(at[None], body_radius or 0.0)[0]:
                 scene.arrowhead(at[:2], direction[:2])
-        points = points3[:, :2]
+        points = points3
     if label:
         # Let the label slide along the orbit if its first choice is crowded.
         fractions = [label_at + k * 0.06 * sign for k in range(1, 8) for sign in (1, -1)]
-        anchors = [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
-        scene.label(label, point_along(points, label_at)[0], priority=2, alternatives=anchors)
+        anchors = [point_along(points, label_at)[0]]
+        anchors += [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
+        if view is not None:  # the label may slide along the orbit, but not onto a hidden (dashed) part
+            anchors = anchors[:1] + [p for p in anchors[1:] if not geo.behind(p[None], body_radius or 0.0)[0]]
+        scene.label(label, anchors[0][:2], priority=2, alternatives=[p[:2] for p in anchors[1:]])
     return line
 
 
@@ -204,12 +204,11 @@ def body(
 
 def _ring_half(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, rings, near: bool) -> None:
     """Near or far half of each ring band: stipple in its tone and edge arcs; near bands first blank what is behind."""
-    spacing = dict(zip(("light", "medium", "dense"), st.DEFAULT_STYLE.ring_stipple_mm, strict=True))
     bands = []
     for inner, outer, tone in rings:
         arcs = [c + radius * geo.ring_arcs(rotation, r)[0 if near else 1] for r in (inner, outer)]
         if len(arcs[0]):  # pole-on there is no far half
-            bands.append((arcs, np.vstack([arcs[1], arcs[0][::-1]]), spacing[tone]))
+            bands.append((arcs, np.vstack([arcs[1], arcs[0][::-1]]), f"ring_{tone}_stipple_mm"))
     if near:
         for _, band, _ in bands:  # all knock-outs first, so one band's paper never cuts a neighbour's edge
             scene.fill(band, "paper")
@@ -228,8 +227,8 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
     for i, ((lat, lon, r, mons), centre) in enumerate(zip(craters, centres, strict=True)):
         # Shadows are drawn about longitude 0, then turned back, so one never straddles the antimeridian.
         shade = surfaces.shadow(lat, 0.0, r, mons)
-        for poly in geo.ring_polygons(rotation @ geo._r3(-np.radians(lon)), shade):
-            scene.fill(c + radius * poly, "stipple", spacing_mm=st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+        for poly in geo.ring_polygons(rotation @ geo.r3(-np.radians(lon)), shade):
+            scene.fill(c + radius * poly, "stipple", spacing_mm="crater_shadow_stipple_mm")
         ring = surfaces.rim(body, i, lat, lon, r)
         points = geo.lat_lon_to_view(np.radians(ring[:, 1]), np.radians(ring[:, 0]), np.eye(3))
         smaller = [(cj, np.radians(k[2])) for cj, k in zip(centres, craters, strict=True) if k[2] < r]
@@ -241,30 +240,25 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
         for run in geo.visible_runs(view):
             scene.line(c + radius * run[:, :2], st.SURFACE)
     base, core = surfaces.regions(body)
-    for rings, spacing in ((base, st.DEFAULT_STYLE.region_stipple_mm), (core, st.DEFAULT_STYLE.region_core_stipple_mm)):
+    for rings, spacing in ((base, "region_stipple_mm"), (core, "region_core_stipple_mm")):
         for ring in rings:
             for poly in geo.ring_polygons(rotation, ring):
                 inside = [h for h in holes if geo.points_in_polygon(h, poly).all()]
                 scene.fill(c + radius * geo.with_holes(poly, inside), "stipple", spacing_mm=spacing)
 
 
-def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None, center=(0.0, 0.0)) -> None:
+def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None) -> None:
     """A straight line with a gap where it would cross a body of ``gap_radius``."""
     start, end = np.asarray(start, float), np.asarray(end, float)
     if not gap_radius:
         scene.line([start, end], role)
         return
-    c = np.asarray(center, float)
     d = end - start
-    # Parameters where the line enters and leaves the (slightly enlarged) disc.
-    r = gap_radius * 1.08
-    f = start - c
-    a, b, cc = d @ d, 2 * f @ d, f @ f - r * r
-    disc = b * b - 4 * a * cc
-    if disc <= 0:
+    roots = geo.line_circle_roots(start, d, gap_radius * BODY_GAP)  # where it enters and leaves the disc
+    if not roots:
         scene.line([start, end], role)
         return
-    t1, t2 = sorted(((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)))
+    t1, t2 = roots
     if t1 > 0:
         scene.line([start, start + min(t1, 1) * d], role)
     if t2 < 1:
@@ -278,7 +272,7 @@ def apsides(
     body_radius: float | None = None,
     names: tuple[str, str] | str = "earth",
     frame: Frame = "perifocal",
-    line_label: str | None = DEFAULT,
+    line_label: str | None = "line of apsides",
     overshoot: float = 0.12,
     view: tuple[float, float] | None = None,
 ) -> None:
@@ -304,10 +298,9 @@ def apsides(
         at, hidden = _place(view, elements, body_radius, point)
         if not hidden:
             scene.marker(at, "dot")
-            scene.label(name, at, prefer=_outward(at, "below"), priority=4)
-    text = _label(line_label, "line of apsides")
-    if text and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
-        scene.label(text, (far * 0.55) * u, prefer="n", priority=1)
+            scene.label(name, at, prefer=_outward(at), priority=4)
+    if line_label and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
+        scene.label(line_label, (far * 0.55) * u, prefer="n", priority=1)
 
 
 def _straight(scene: Scene, start, end, role: str, body_radius, view, elements: Elements) -> None:
@@ -323,15 +316,12 @@ def _place(view, elements: Elements, body_radius: float | None, point: np.ndarra
     if view is None:
         return point, False
     p = _project(view, point[None], elements)
-    return p[0, :2], bool(geo._behind(p, body_radius or 0.0)[0])
+    return p[0, :2], bool(geo.behind(p, body_radius or 0.0)[0])
 
 
-def _outward(u: np.ndarray, side: str) -> Direction:
+def _outward(u: np.ndarray) -> Direction:
     """Compass direction pointing away from the centre along ``u``, biased below the line."""
-    east = u[0] >= 0
-    if side == "below":
-        return "se" if east else "sw"
-    return "ne" if east else "nw"
+    return "se" if u[0] >= 0 else "sw"
 
 
 def nodes(
@@ -389,11 +379,11 @@ def angle(
     pts = geo.arc(tuple(center), radius, start + sign * inset, stop - sign * inset)
     line = scene.line(pts, role)
     if arrow:
-        scene.arrowhead(pts[-1], pts[-1] - pts[-2], size_mm=2.0)
+        scene.arrowhead(pts[-1], pts[-1] - pts[-2], size_mm="angle_arrow_mm")
     if label:
         mid = (start + stop) / 2
         at = np.asarray(center, float) + radius * np.array([np.cos(mid), np.sin(mid)])
-        scene.label(label, at, prefer=_compass(mid), priority=5, height_mm=SYMBOL_HEIGHT_MM)
+        scene.label(label, at, prefer=_compass(mid), priority=5, height_mm="symbol_height_mm")
     return line
 
 
@@ -437,7 +427,7 @@ def spacecraft(
     at, hidden = _place(view, elements, body_radius, elements.position(nu, frame if view is None else "perifocal"))
     if hidden:
         return at
-    scene.marker(at, marker, size_mm=1.8 if marker == "open" else None)
+    scene.marker(at, marker, size_mm="spacecraft_marker_mm" if marker == "open" else None)
     if label:
         scene.label(label, at, prefer=_compass(np.arctan2(at[1], at[0])), priority=4)
     return at
@@ -457,7 +447,7 @@ def radius_vector(
     at = elements.position(nu, frame)
     r = np.linalg.norm(at)
     u = at / r
-    start = u * (body_radius * 1.08 if body_radius else 0.0)
+    start = u * (body_radius * BODY_GAP if body_radius else 0.0)
     line = scene.vector(start, at - u * 0.03 * r, role)
     if label:
         mid = (start + at) / 2

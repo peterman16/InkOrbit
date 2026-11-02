@@ -14,7 +14,7 @@ import numpy as np
 
 from . import labels, patterns
 from .lettering import letter
-from .scene import Arrowhead, Fill, Label, Line, Marker, Scene, Text
+from .scene import Arrowhead, Fill, Label, Line, Marker, Scene, Size, Text
 from .style import AXIS, BORDER, DEFAULT_STYLE, GRID, Style
 
 # --- Pages -----------------------------------------------------------------------
@@ -239,7 +239,7 @@ def _place_labels(d: Drawing, items: list[Label]) -> None:
 
     # Higher priority first; ties keep the order they were added in.
     for item in sorted(items, key=lambda i: -i.priority):
-        height = item.height_mm or d.style.text_height_mm
+        height = _mm(item.height_mm, d.style.text_height_mm, d.style)
         lettering = letter(item.text, height, d.style.font)
         anchors = [item.at] if item.alternatives is None else [item.at, *item.alternatives]
         anchor, box, origin, needs_leader = labels.place(
@@ -325,13 +325,24 @@ def _frame(d: Drawing, scene: Scene) -> None:
             _letter_into(d, scene.units, np.array([x1 + 1.5, y0 - 1.5]), h, "left", "top", 0.0, pen)
 
 
-def _spacing(spacing: float | None, default: float, style: Style) -> float:
-    """A fill's spacing in mm: ``default`` if None, else ``spacing`` if finite and at least the style's minimum."""
-    if spacing is None:
+def _mm(value: Size, default: float, style: Style) -> float:
+    """A size in mm: ``default`` if None, the ``style`` field a str names, else the number itself."""
+    if value is None:
         return default
-    if not np.isfinite(spacing) or spacing < style.min_spacing_mm:
-        raise ValueError(f"fill spacing must be finite and at least {style.min_spacing_mm} mm, got {spacing}")
-    return spacing
+    if isinstance(value, str):
+        try:
+            return getattr(style, value)
+        except AttributeError:
+            raise ValueError(f"style has no size named {value!r}") from None
+    return value
+
+
+def _spacing(spacing: Size, default: float, style: Style) -> float:
+    """A fill's spacing in mm, which must be finite and at least the style's minimum."""
+    mm = _mm(spacing, default, style)
+    if not np.isfinite(mm) or mm < style.min_spacing_mm:
+        raise ValueError(f"fill spacing must be finite and at least {style.min_spacing_mm} mm, got {mm}")
+    return mm
 
 
 def _resolve(item, d: Drawing) -> None:
@@ -348,7 +359,10 @@ def _resolve(item, d: Drawing) -> None:
             d.items.append(Solid(poly, paper=item.pattern == "paper"))
         elif item.pattern == "stipple":
             dots = patterns.stipple(
-                poly, _spacing(item.spacing_mm, style.stipple_spacing_mm, style), seed=item.seed or 0
+                poly,
+                _spacing(item.spacing_mm, style.stipple_spacing_mm, style),
+                seed=item.seed or 0,
+                finest_mm=style.stipple_floor_mm,
             )
             if len(dots):
                 d.items.append(Dots(dots, style.stipple_dot_mm))
@@ -359,7 +373,7 @@ def _resolve(item, d: Drawing) -> None:
         else:
             raise ValueError(f"unknown fill pattern {item.pattern!r}")
     elif isinstance(item, Arrowhead):
-        length = item.size_mm or style.arrow_length_mm
+        length = _mm(item.size_mm, style.arrow_length_mm, style)
         width = length * style.arrow_width_mm / style.arrow_length_mm
         tip = d.to_page(item.at)
         u = np.asarray(item.direction, dtype=float)
@@ -373,7 +387,14 @@ def _resolve(item, d: Drawing) -> None:
         pen = style.bold_pen_mm if item.bold else style.text_pen_mm
         anchor = d.to_page(item.at) + np.asarray(item.offset_mm, dtype=float)
         _letter_into(
-            d, item.text, anchor, item.height_mm or style.text_height_mm, item.ha, item.va, item.rotation_deg, pen
+            d,
+            item.text,
+            anchor,
+            _mm(item.height_mm, style.text_height_mm, style),
+            item.ha,
+            item.va,
+            item.rotation_deg,
+            pen,
         )
     else:
         raise TypeError(f"cannot lay out {type(item).__name__}")
@@ -385,7 +406,7 @@ def _circle(center: np.ndarray, radius: float, n: int = 48) -> np.ndarray:
 
 
 def _marker(item: Marker, d: Drawing) -> None:
-    size = item.size_mm or d.style.marker_mm
+    size = _mm(item.size_mm, d.style.marker_mm, d.style)
     c = d.to_page(item.at)
     if item.kind == "dot":
         d.items.append(Solid(_circle(c, size / 2)))
@@ -398,11 +419,6 @@ def _marker(item: Marker, d: Drawing) -> None:
         r = np.where(k % 2 == 0, size, size * 0.4)
         a = np.pi / 2 + k * np.pi / 5
         d.items.append(Solid(c + np.column_stack([r * np.cos(a), r * np.sin(a)])))
-    elif item.kind == "cross":
-        h = size / 2
-        w = d.style.pen("outline").width_mm
-        d.items.append(Stroke(np.array([c + (-h, -h), c + (h, h)]), w))
-        d.items.append(Stroke(np.array([c + (-h, h), c + (h, -h)]), w))
     else:
         raise ValueError(f"unknown marker kind {item.kind!r}")
 

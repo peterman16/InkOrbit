@@ -346,7 +346,7 @@ def ground_track(
         for ring in maps.land():
             clipped = geometry.clip_polygon(ring, *box)
             if clipped is not None:
-                s.fill(clipped, "stipple", spacing_mm=0.7)
+                s.fill(clipped, "stipple", spacing_mm="land_stipple_mm")
     elif land is not None:
         raise ValueError("land must be None or 'stipple'")
     for coast in maps.coastlines():
@@ -370,7 +370,7 @@ def ground_track(
             for ring in maps.small_circle(slat, slon, rest[0]):
                 for run in geometry.clip_polyline(ring, *box):
                     s.line(run, st.OUTLINE)
-        s.marker((maps.wrap_longitude(slon), slat), "open", size_mm=1.4)
+        s.marker((maps.wrap_longitude(slon), slat), "open", size_mm="station_marker_mm")
         s.label(str(k), (maps.wrap_longitude(slon), slat), priority=5)
         notes.append(f"{k}. {station_name}")
     for text, elat, elon in events:

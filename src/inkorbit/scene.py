@@ -20,9 +20,10 @@ ArrayLike2 = Sequence[float] | np.ndarray
 
 HAlign = Literal["left", "center", "right"]
 VAlign = Literal["baseline", "bottom", "center", "top"]
-MarkerKind = Literal["dot", "open", "star", "cross"]
+MarkerKind = Literal["dot", "open", "star"]
 Pattern = Literal["stipple", "hatch", "solid", "paper"]
 Direction = Literal["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+Size = float | str | None  # mm; a Style field name; or None for the layout default
 
 
 def _xy(value: ArrayLike2) -> np.ndarray:
@@ -50,7 +51,7 @@ class Line:
 class Fill:
     polygon: np.ndarray
     pattern: Pattern = "stipple"
-    spacing_mm: float | None = None
+    spacing_mm: Size = None
     angle_deg: float | None = None
     seed: int | None = None  # stipple randomness; defaults to the fill's position in the scene
 
@@ -59,21 +60,21 @@ class Fill:
 class Arrowhead:
     at: np.ndarray
     direction: np.ndarray
-    size_mm: float | None = None
+    size_mm: Size = None
 
 
 @dataclass(frozen=True)
 class Marker:
     at: np.ndarray
     kind: MarkerKind = "dot"
-    size_mm: float | None = None
+    size_mm: Size = None
 
 
 @dataclass(frozen=True)
 class Text:
     text: str
     at: np.ndarray
-    height_mm: float | None = None
+    height_mm: Size = None
     ha: HAlign = "left"
     va: VAlign = "baseline"
     rotation_deg: float = 0.0
@@ -89,7 +90,7 @@ class Label:
     at: np.ndarray
     prefer: Direction | None = None
     priority: int = 0
-    height_mm: float | None = None
+    height_mm: Size = None
     bold: bool = False
     alternatives: np.ndarray | None = None  # other acceptable anchors, in order of preference
 
@@ -128,7 +129,6 @@ class Scene:
         *,
         closed: bool = False,
         arrows: Sequence[float] = (),
-        arrow_size_mm: float | None = None,
     ) -> Line:
         """Add a polyline. ``arrows`` places direction arrowheads at fractions of its length."""
         pts = _polyline(points)
@@ -136,25 +136,23 @@ class Scene:
         self.add(line)
         for fraction in arrows:
             at, direction = point_along(pts, fraction)
-            self.add(Arrowhead(at, direction, arrow_size_mm))
+            self.add(Arrowhead(at, direction))
         return line
 
     def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, angle_deg=None, seed=None) -> Fill:
         return self.add(Fill(_polyline(polygon), pattern, spacing_mm, angle_deg, seed))
 
-    def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: float | None = None) -> Arrowhead:
+    def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: Size = None) -> Arrowhead:
         return self.add(Arrowhead(_xy(at), _xy(direction), size_mm))
 
-    def vector(
-        self, start: ArrayLike2, end: ArrayLike2, role: str = _style.ORBIT, size_mm: float | None = None
-    ) -> Line:
+    def vector(self, start: ArrayLike2, end: ArrayLike2, role: str = _style.ORBIT) -> Line:
         """A straight line ending in an arrowhead at ``end``."""
         start, end = _xy(start), _xy(end)
         line = self.add(Line(np.array([start, end]), role))
-        self.add(Arrowhead(end, end - start, size_mm))
+        self.add(Arrowhead(end, end - start))
         return line
 
-    def marker(self, at: ArrayLike2, kind: MarkerKind = "dot", size_mm: float | None = None) -> Marker:
+    def marker(self, at: ArrayLike2, kind: MarkerKind = "dot", size_mm: Size = None) -> Marker:
         return self.add(Marker(_xy(at), kind, size_mm))
 
     def text(
@@ -162,7 +160,7 @@ class Scene:
         text: str,
         at: ArrayLike2,
         *,
-        height_mm: float | None = None,
+        height_mm: Size = None,
         ha: HAlign = "left",
         va: VAlign = "baseline",
         rotation_deg: float = 0.0,
@@ -178,7 +176,7 @@ class Scene:
         *,
         prefer: Direction | None = None,
         priority: int = 0,
-        height_mm: float | None = None,
+        height_mm: Size = None,
         bold: bool = False,
         alternatives=None,
     ) -> Label:

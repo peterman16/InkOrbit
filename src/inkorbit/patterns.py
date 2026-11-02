@@ -5,17 +5,20 @@ from __future__ import annotations
 import numpy as np
 
 from .geometry import points_in_polygon
+from .style import DEFAULT_STYLE
 
 # A fill too small or thin for a few dots at its spacing (a little crater shadow) is stippled finer instead,
-# by this factor at a time, down to this spacing: it stays dots, never turns solid.
-_MIN_DOTS, _FINER, _FINEST_MM = 5, 0.75, 0.15
+# by this factor at a time, down to ``finest_mm``: it stays dots, never turns solid.
+_MIN_DOTS, _FINER = 5, 0.75
 
 
-def stipple(polygon: np.ndarray, spacing: float, seed: int = 0) -> np.ndarray:
+def stipple(
+    polygon: np.ndarray, spacing: float, seed: int = 0, finest_mm: float = DEFAULT_STYLE.stipple_floor_mm
+) -> np.ndarray:
     """Hand-stipple-like dots: a jittered grid clipped to the polygon, finer if it would hold fewer than 5 dots."""
     dots = _jittered(polygon, spacing, seed)
-    while len(dots) < _MIN_DOTS and spacing > _FINEST_MM:
-        spacing = max(spacing * _FINER, _FINEST_MM)
+    while len(dots) < _MIN_DOTS and spacing > finest_mm:
+        spacing = max(spacing * _FINER, finest_mm)
         dots = _jittered(polygon, spacing, seed)
     return dots
 
