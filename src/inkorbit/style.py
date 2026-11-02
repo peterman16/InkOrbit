@@ -19,6 +19,9 @@ class Pen:
     dash_mm: tuple[float, ...] | None = None
 
 
+INK = "#000000"  # black ink on white paper, always: tone comes from hatching and stipple
+PAPER = "#ffffff"
+
 # Line roles. Diagrams say *what* a line is; the style decides how it looks.
 ORBIT = "orbit"  # the subject of the figure
 TRANSFER = "transfer"  # transfer arcs, future or alternative paths
@@ -60,8 +63,6 @@ class Style:
     Use :func:`dataclasses.replace` (or :meth:`with_pen`) to derive variations.
     """
 
-    ink: str = "#000000"
-    paper: str = "#ffffff"
     pens: Mapping[str, Pen] = field(default_factory=lambda: MappingProxyType(dict(_DEFAULT_PENS)))
 
     # Lettering (Hershey single-stroke vector fonts).
