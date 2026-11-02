@@ -347,3 +347,15 @@ def test_oblique_spacecraft_behind_the_globe_is_not_drawn():
     assert behind.items == [] and np.allclose(at, [0.0, 6 * np.sin(0.2)])
     draw.spacecraft(front, el, 0.0, label="sc", view=OBLIQUE, body_radius=1.5)
     assert _kinds(front) == [Marker, Label]
+
+
+def test_oblique_orbit_label_slides_only_along_the_front():
+    # Circular equatorial orbit of radius 2 seen at elevation 0.3, azimuth 0: the half near nu = pi is behind the
+    # unit globe, so its view point has |xy| < 1 and z < 0 (see the test above).
+    scene = ink.Scene()
+    draw.orbit(scene, ink.Elements(a=2.0), view=(0.3, 0.0), body_radius=1.0, arrows=(), label="x", label_at=0.1)
+    (label,) = [i for i in scene.items if isinstance(i, Label)]
+    (hidden,) = _lines(scene, st.HIDDEN)
+    assert len(label.alternatives) > 0
+    lo, hi = hidden.points.min(axis=0), hidden.points.max(axis=0)
+    assert not any(np.all((a > lo) & (a < hi)) for a in label.alternatives)

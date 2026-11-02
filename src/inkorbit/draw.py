@@ -38,6 +38,9 @@ __all__ = [
 # Greek symbols on angles read better a little larger than running text.
 SYMBOL_HEIGHT_MM = 3.2
 
+# A line or vector that meets a globe stops this far outside its radius.
+BODY_GAP = 1.08
+
 # Sentinel meaning "use the conventional label for this thing".
 DEFAULT = "__default__"
 
@@ -97,14 +100,17 @@ def orbit(
         line = next((ln for ln in lines if ln.role == role), lines[0])
         for fraction in arrows:
             at, direction = point_along(points3, fraction)
-            if not geo._behind(at[None], body_radius or 0.0)[0]:
+            if not geo.behind(at[None], body_radius or 0.0)[0]:
                 scene.arrowhead(at[:2], direction[:2])
-        points = points3[:, :2]
+        points = points3
     if label:
         # Let the label slide along the orbit if its first choice is crowded.
         fractions = [label_at + k * 0.06 * sign for k in range(1, 8) for sign in (1, -1)]
-        anchors = [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
-        scene.label(label, point_along(points, label_at)[0], priority=2, alternatives=anchors)
+        anchors = [point_along(points, label_at)[0]]
+        anchors += [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
+        if view is not None:  # the label may slide along the orbit, but not onto a hidden (dashed) part
+            anchors = anchors[:1] + [p for p in anchors[1:] if not geo.behind(p[None], body_radius or 0.0)[0]]
+        scene.label(label, anchors[0][:2], priority=2, alternatives=[p[:2] for p in anchors[1:]])
     return line
 
 
@@ -232,7 +238,7 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
     for i, ((lat, lon, r, mons), centre) in enumerate(zip(craters, centres, strict=True)):
         # Shadows are drawn about longitude 0, then turned back, so one never straddles the antimeridian.
         shade = surfaces.shadow(lat, 0.0, r, mons)
-        for poly in geo.ring_polygons(rotation @ geo._r3(-np.radians(lon)), shade):
+        for poly in geo.ring_polygons(rotation @ geo.r3(-np.radians(lon)), shade):
             scene.fill(c + radius * poly, "stipple", spacing_mm=st.DEFAULT_STYLE.crater_shadow_stipple_mm)
         ring = surfaces.rim(body, i, lat, lon, r)
         points = geo.lat_lon_to_view(np.radians(ring[:, 1]), np.radians(ring[:, 0]), np.eye(3))
@@ -260,15 +266,11 @@ def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None, 
         return
     c = np.asarray(center, float)
     d = end - start
-    # Parameters where the line enters and leaves the (slightly enlarged) disc.
-    r = gap_radius * 1.08
-    f = start - c
-    a, b, cc = d @ d, 2 * f @ d, f @ f - r * r
-    disc = b * b - 4 * a * cc
-    if disc <= 0:
+    roots = geo.line_circle_roots(start - c, d, gap_radius * BODY_GAP)  # where it enters and leaves the disc
+    if not roots:
         scene.line([start, end], role)
         return
-    t1, t2 = sorted(((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)))
+    t1, t2 = roots
     if t1 > 0:
         scene.line([start, start + min(t1, 1) * d], role)
     if t2 < 1:
@@ -327,7 +329,7 @@ def _place(view, elements: Elements, body_radius: float | None, point: np.ndarra
     if view is None:
         return point, False
     p = _project(view, point[None], elements)
-    return p[0, :2], bool(geo._behind(p, body_radius or 0.0)[0])
+    return p[0, :2], bool(geo.behind(p, body_radius or 0.0)[0])
 
 
 def _outward(u: np.ndarray, side: str) -> Direction:
@@ -461,7 +463,7 @@ def radius_vector(
     at = elements.position(nu, frame)
     r = np.linalg.norm(at)
     u = at / r
-    start = u * (body_radius * 1.08 if body_radius else 0.0)
+    start = u * (body_radius * BODY_GAP if body_radius else 0.0)
     line = scene.vector(start, at - u * 0.03 * r, role)
     if label:
         mid = (start + at) / 2
