@@ -339,8 +339,6 @@ def _resolve(item, d: Drawing) -> None:
     if isinstance(item, Line):
         pen = style.pen(item.role)
         pts = d.to_page(item.points)
-        if item.closed:
-            pts = np.vstack([pts, pts[:1]])
         d.items.append(Stroke(pts, pen.width_mm, pen.dash_mm, item.role))
     elif isinstance(item, Fill):
         poly = d.to_page(item.polygon)
@@ -353,8 +351,9 @@ def _resolve(item, d: Drawing) -> None:
             if len(dots):
                 d.items.append(Dots(dots, style.stipple_dot_mm))
         elif item.pattern == "hatch":
-            angle = style.hatch_angle_deg if item.angle_deg is None else item.angle_deg
-            for seg in patterns.hatch(poly, _spacing(item.spacing_mm, style.hatch_spacing_mm, style), angle):
+            for seg in patterns.hatch(
+                poly, _spacing(item.spacing_mm, style.hatch_spacing_mm, style), style.hatch_angle_deg
+            ):
                 d.items.append(Stroke(seg, style.hatch_pen_mm))
         else:
             raise ValueError(f"unknown fill pattern {item.pattern!r}")
@@ -398,11 +397,6 @@ def _marker(item: Marker, d: Drawing) -> None:
         r = np.where(k % 2 == 0, size, size * 0.4)
         a = np.pi / 2 + k * np.pi / 5
         d.items.append(Solid(c + np.column_stack([r * np.cos(a), r * np.sin(a)])))
-    elif item.kind == "cross":
-        h = size / 2
-        w = d.style.pen("outline").width_mm
-        d.items.append(Stroke(np.array([c + (-h, -h), c + (h, h)]), w))
-        d.items.append(Stroke(np.array([c + (-h, h), c + (h, -h)]), w))
     else:
         raise ValueError(f"unknown marker kind {item.kind!r}")
 

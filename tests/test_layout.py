@@ -49,6 +49,14 @@ def test_items_resolve_to_ink_primitives():
     assert kinds == {Stroke, Solid, Dots}
 
 
+def test_star_marker_is_a_ten_point_solid_around_its_position():
+    scene = _scene()
+    scene.marker((1, 1), "star")
+    d = ink.layout(scene)
+    (star,) = [i for i in d.items if isinstance(i, Solid) and len(i.polygon) == 10]
+    assert np.allclose(np.hypot(*(star.polygon - d.to_page((1, 1))).T).max(), d.style.marker_mm)
+
+
 def test_unknown_role_and_page():
     scene = ink.Scene()
     scene.line([[0, 0], [1, 1]], "nonsense")

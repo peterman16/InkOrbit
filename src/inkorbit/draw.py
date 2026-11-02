@@ -258,15 +258,14 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
                 scene.fill(c + radius * geo.with_holes(poly, inside), "stipple", spacing_mm=spacing)
 
 
-def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None, center=(0.0, 0.0)) -> None:
+def _broken_line(scene: Scene, start, end, role: str, gap_radius: float | None) -> None:
     """A straight line with a gap where it would cross a body of ``gap_radius``."""
     start, end = np.asarray(start, float), np.asarray(end, float)
     if not gap_radius:
         scene.line([start, end], role)
         return
-    c = np.asarray(center, float)
     d = end - start
-    roots = geo.line_circle_roots(start - c, d, gap_radius * BODY_GAP)  # where it enters and leaves the disc
+    roots = geo.line_circle_roots(start, d, gap_radius * BODY_GAP)  # where it enters and leaves the disc
     if not roots:
         scene.line([start, end], role)
         return
@@ -310,7 +309,7 @@ def apsides(
         at, hidden = _place(view, elements, body_radius, point)
         if not hidden:
             scene.marker(at, "dot")
-            scene.label(name, at, prefer=_outward(at, "below"), priority=4)
+            scene.label(name, at, prefer=_outward(at), priority=4)
     text = _label(line_label, "line of apsides")
     if text and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
         scene.label(text, (far * 0.55) * u, prefer="n", priority=1)
@@ -332,12 +331,9 @@ def _place(view, elements: Elements, body_radius: float | None, point: np.ndarra
     return p[0, :2], bool(geo.behind(p, body_radius or 0.0)[0])
 
 
-def _outward(u: np.ndarray, side: str) -> Direction:
+def _outward(u: np.ndarray) -> Direction:
     """Compass direction pointing away from the centre along ``u``, biased below the line."""
-    east = u[0] >= 0
-    if side == "below":
-        return "se" if east else "sw"
-    return "ne" if east else "nw"
+    return "se" if u[0] >= 0 else "sw"
 
 
 def nodes(

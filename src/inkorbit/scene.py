@@ -20,7 +20,7 @@ ArrayLike2 = Sequence[float] | np.ndarray
 
 HAlign = Literal["left", "center", "right"]
 VAlign = Literal["baseline", "bottom", "center", "top"]
-MarkerKind = Literal["dot", "open", "star", "cross"]
+MarkerKind = Literal["dot", "open", "star"]
 Pattern = Literal["stipple", "hatch", "solid", "paper"]
 Direction = Literal["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 
@@ -43,7 +43,6 @@ def _polyline(points) -> np.ndarray:
 class Line:
     points: np.ndarray
     role: str = _style.ORBIT
-    closed: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,7 +50,6 @@ class Fill:
     polygon: np.ndarray
     pattern: Pattern = "stipple"
     spacing_mm: float | None = None
-    angle_deg: float | None = None
     seed: int | None = None  # stipple randomness; defaults to the fill's position in the scene
 
 
@@ -126,32 +124,28 @@ class Scene:
         points,
         role: str = _style.ORBIT,
         *,
-        closed: bool = False,
         arrows: Sequence[float] = (),
-        arrow_size_mm: float | None = None,
     ) -> Line:
         """Add a polyline. ``arrows`` places direction arrowheads at fractions of its length."""
         pts = _polyline(points)
-        line = Line(pts, role, closed)
+        line = Line(pts, role)
         self.add(line)
         for fraction in arrows:
             at, direction = point_along(pts, fraction)
-            self.add(Arrowhead(at, direction, arrow_size_mm))
+            self.add(Arrowhead(at, direction))
         return line
 
-    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, angle_deg=None, seed=None) -> Fill:
-        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, angle_deg, seed))
+    def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, seed=None) -> Fill:
+        return self.add(Fill(_polyline(polygon), pattern, spacing_mm, seed))
 
     def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: float | None = None) -> Arrowhead:
         return self.add(Arrowhead(_xy(at), _xy(direction), size_mm))
 
-    def vector(
-        self, start: ArrayLike2, end: ArrayLike2, role: str = _style.ORBIT, size_mm: float | None = None
-    ) -> Line:
+    def vector(self, start: ArrayLike2, end: ArrayLike2, role: str = _style.ORBIT) -> Line:
         """A straight line ending in an arrowhead at ``end``."""
         start, end = _xy(start), _xy(end)
         line = self.add(Line(np.array([start, end]), role))
-        self.add(Arrowhead(end, end - start, size_mm))
+        self.add(Arrowhead(end, end - start))
         return line
 
     def marker(self, at: ArrayLike2, kind: MarkerKind = "dot", size_mm: float | None = None) -> Marker:
