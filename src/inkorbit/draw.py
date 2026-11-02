@@ -61,27 +61,67 @@ def orbit(
     label: str | None = None,
     label_at: float = 0.35,
     max_radius: float | None = None,
+    view: tuple[float, float] | None = None,
+    body_radius: float | None = None,
 ) -> Line:
     """Draw an orbit from :class:`Elements` or from an (N, 2) / (N, 3) array of positions.
 
     3D positions are projected onto their own orbital plane, periapsis to the
     right (the perifocal view). ``arrows`` are fractions of the path length
     where direction arrowheads go; ``label_at`` is where the label attaches.
+
+    ``view=(elevation, azimuth)`` (radians) instead shows the orbit from an
+    oblique camera in the inertial frame, azimuth from the vernal equinox; it
+    replaces ``frame``. Arrays are then taken as inertial, (N, 2) ones as lying
+    in the equator. The part behind a globe of ``body_radius`` at the origin
+    is drawn HIDDEN and loses its arrowheads; draw the orbit after the globe,
+    seen with ``draw.body(tilt=elevation, spin=azimuth)``. Returns the first
+    run in front.
     """
     if isinstance(orbit, Elements):
-        points = orbit.points(frame=frame, max_radius=max_radius)
+        points = orbit.points(frame=frame if view is None else "perifocal", max_radius=max_radius)
     else:
         points = np.asarray(orbit, dtype=float)
-        if points.ndim == 2 and points.shape[1] == 3:
+        if view is None and points.ndim == 2 and points.shape[1] == 3:
             points = geo.project_to_plane(points)
     closed = isinstance(orbit, Elements) and orbit.is_closed
-    line = scene.line(points, role, arrows=arrows)
+    if view is None:
+        line = scene.line(points, role, arrows=arrows)
+    else:
+        points3 = _project(view, points, orbit if isinstance(orbit, Elements) else None)
+        lines = _split(scene, points3, role, body_radius, closed)
+        line = next((ln for ln in lines if ln.role == role), lines[0])
+        for fraction in arrows:
+            at, direction = point_along(points3, fraction)
+            if not geo._behind(at[None], body_radius or 0.0)[0]:
+                scene.arrowhead(at[:2], direction[:2])
+        points = points3[:, :2]
     if label:
         # Let the label slide along the orbit if its first choice is crowded.
         fractions = [label_at + k * 0.06 * sign for k in range(1, 8) for sign in (1, -1)]
         anchors = [point_along(points, f % 1.0 if closed else f)[0] for f in fractions if closed or 0 < f < 1]
         scene.label(label, point_along(points, label_at)[0], priority=2, alternatives=anchors)
     return line
+
+
+def _project(view: tuple[float, float], points: np.ndarray, elements: Elements | None = None) -> np.ndarray:
+    """Camera-frame (N, 3) points seen from ``view=(elevation, azimuth)``, +z towards the viewer.
+
+    With ``elements`` the points are perifocal 2D; otherwise (N, 3) points are inertial and (N, 2) points lie in the
+    equatorial plane.
+    """
+    pts = np.asarray(points, dtype=float)
+    if pts.shape[1] == 2:
+        pts = np.column_stack([pts, np.zeros(len(pts))])
+    if elements is not None:
+        pts = pts @ geo.orbit_view_rotation(elements.i, elements.raan, elements.argp)  # perifocal -> inertial
+    return pts @ geo.view_rotation(*view).T
+
+
+def _split(scene: Scene, points3: np.ndarray, role: str, body_radius: float | None, closed: bool = False) -> list[Line]:
+    """Lines of camera-frame points: in ``role`` in front of the globe of ``body_radius``, HIDDEN behind it."""
+    runs = geo.split_behind(points3, body_radius or 0.0, closed)
+    return [scene.line(run, st.HIDDEN if hidden else role) for run, hidden in runs]
 
 
 def body(
@@ -240,29 +280,50 @@ def apsides(
     frame: Frame = "perifocal",
     line_label: str | None = DEFAULT,
     overshoot: float = 0.12,
+    view: tuple[float, float] | None = None,
 ) -> None:
     """Line of apsides with markers and names at periapsis (and apoapsis for ellipses).
 
     ``names`` is a body name ("earth", "moon", "sun") or a pair of words;
-    anything else gives "periapsis"/"apoapsis".
+    anything else gives "periapsis"/"apoapsis". With ``view`` (see :func:`orbit`)
+    the line runs through the globe of ``body_radius`` drawn HIDDEN instead of
+    breaking, an apsis behind the globe gets no marker or name, and the line
+    itself is not labelled.
     """
     if isinstance(names, str):
         names = _APSIS_NAMES.get(names.lower(), ("periapsis", "apoapsis"))
-    w = elements.angle_of(0.0, frame)
+    w = elements.angle_of(0.0, frame if view is None else "perifocal")
     u = np.array([np.cos(w), np.sin(w)])
     rp = elements.periapsis
     ext = overshoot * (rp + (elements.apoapsis if elements.is_closed else rp))
     far = -(elements.apoapsis + ext) if elements.is_closed else -0.3 * rp
-    _broken_line(scene, far * u, (rp + ext) * u, st.APSE, body_radius)
+    _straight(scene, far * u, (rp + ext) * u, st.APSE, body_radius, view, elements)
 
-    scene.marker(rp * u, "dot")
-    scene.label(names[0], rp * u, prefer=_outward(u, "below"), priority=4)
-    if elements.is_closed:
-        scene.marker(-elements.apoapsis * u, "dot")
-        scene.label(names[1], -elements.apoapsis * u, prefer=_outward(-u, "below"), priority=4)
+    apses = [rp * u, -elements.apoapsis * u] if elements.is_closed else [rp * u]
+    for point, name in zip(apses, names, strict=False):
+        at, hidden = _place(view, elements, body_radius, point)
+        if not hidden:
+            scene.marker(at, "dot")
+            scene.label(name, at, prefer=_outward(at, "below"), priority=4)
     text = _label(line_label, "line of apsides")
-    if text and elements.is_closed:
+    if text and elements.is_closed and view is None:  # seen obliquely it would crowd the names on the orbit
         scene.label(text, (far * 0.55) * u, prefer="n", priority=1)
+
+
+def _straight(scene: Scene, start, end, role: str, body_radius, view, elements: Elements) -> None:
+    """A line between two drawing points: broken at the body, or with ``view`` split in front of and behind it."""
+    if view is None:
+        _broken_line(scene, start, end, role, body_radius)
+    else:
+        _split(scene, _project(view, np.linspace(start, end, 201), elements), role, body_radius)
+
+
+def _place(view, elements: Elements, body_radius: float | None, point: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Where a drawing point goes, and whether the globe hides it (never without ``view``: it is then as given)."""
+    if view is None:
+        return point, False
+    p = _project(view, point[None], elements)
+    return p[0, :2], bool(geo._behind(p, body_radius or 0.0)[0])
 
 
 def _outward(u: np.ndarray, side: str) -> Direction:
@@ -280,8 +341,13 @@ def nodes(
     body_radius: float | None = None,
     frame: Frame = "perifocal",
     labels: tuple[str, str] | None = ("ascending node", "descending node"),
+    view: tuple[float, float] | None = None,
 ) -> None:
-    """Line of nodes. In the orbit's own plane the ascending node lies at true anomaly -argp."""
+    """Line of nodes. In the orbit's own plane the ascending node lies at true anomaly -argp.
+
+    With ``view`` (see :func:`orbit`) it is split like :func:`apsides`.
+    """
+    frame = frame if view is None else "perifocal"
     nu_asc = -elements.argp
     nu_desc = np.pi - elements.argp
     a = elements.position(nu_asc, frame) if _reachable(elements, nu_asc) else None
@@ -290,12 +356,15 @@ def nodes(
     u = np.array([np.cos(w), np.sin(w)])
     reach_a = np.linalg.norm(a) * 1.12 if a is not None else elements.periapsis
     reach_d = np.linalg.norm(d) * 1.12 if d is not None else elements.periapsis
-    _broken_line(scene, -reach_d * u, reach_a * u, st.APSE, body_radius)
+    _straight(scene, -reach_d * u, reach_a * u, st.APSE, body_radius, view, elements)
     for point, text in zip((a, d), labels or (None, None), strict=True):
         if point is not None:
-            scene.marker(point, "open")
+            at, hidden = _place(view, elements, body_radius, point)
+            if hidden:
+                continue
+            scene.marker(at, "open")
             if text:
-                scene.label(text, point, priority=3)
+                scene.label(text, at, priority=3)
 
 
 def _reachable(elements: Elements, nu: float) -> bool:
@@ -357,9 +426,17 @@ def spacecraft(
     frame: Frame = "perifocal",
     marker: str = "open",
     label: str | None = None,
+    view: tuple[float, float] | None = None,
+    body_radius: float | None = None,
 ) -> np.ndarray:
-    """Mark the object's position at true anomaly ``nu`` (defaults to ``elements.nu``)."""
-    at = elements.position(nu, frame)
+    """Mark the object's position at true anomaly ``nu`` (defaults to ``elements.nu``) and return it.
+
+    With ``view`` (see :func:`orbit`) the position is projected, and when the globe of ``body_radius`` hides it
+    nothing is drawn: no marker and no label.
+    """
+    at, hidden = _place(view, elements, body_radius, elements.position(nu, frame if view is None else "perifocal"))
+    if hidden:
+        return at
     scene.marker(at, marker, size_mm=1.8 if marker == "open" else None)
     if label:
         scene.label(label, at, prefer=_compass(np.arctan2(at[1], at[0])), priority=4)

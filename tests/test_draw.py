@@ -275,3 +275,75 @@ def test_edge_on_and_pole_on_rings_draw(tilt, halves):
     draw.body(scene, 1.0, body="saturn", surface=True, tilt=tilt, label="SATURN")
     scene.render()
     assert len(_ring_stipples(scene)) == halves  # pole-on there is no far half
+
+
+def _lines(scene, role):
+    return [i for i in scene.items if isinstance(i, Line) and i.role == role]
+
+
+@pytest.mark.parametrize("elevation", [0.0, 0.4, 1.2])
+def test_oblique_orbit_projects_the_apogee(elevation):
+    # Equatorial, argp = 0: apogee at inertial (-a(1 + e), 0, 0). Azimuth 90 deg puts the -x axis to the right
+    # at any elevation (view_rotation: longitude 90E faces the viewer), so apogee is drawn at a(1 + e) = 3.
+    line = draw.orbit(ink.Scene(), ink.Elements(a=2.0, e=0.5), view=(elevation, np.pi / 2), arrows=())
+    assert np.hypot(*line.points.T).max() == pytest.approx(3.0, rel=1e-5)
+    # Azimuth 0: the apse line points at the viewer and tilts up by the elevation.
+    line = draw.orbit(ink.Scene(), ink.Elements(a=2.0, e=0.5), view=(elevation, 0.0), arrows=())
+    assert line.points[:, 1].max() == pytest.approx(3.0 * np.sin(elevation), abs=1e-4)
+
+
+def test_oblique_orbit_behind_the_globe_is_hidden_without_arrowheads():
+    # Circular equatorial orbit of radius 2 at azimuth 0: half way round (nu = pi) it is at view
+    # (0, 2 sin el, -2 cos el), behind the unit globe; a quarter round (nu = pi/2) it is at (2, 0, 0), clear of it.
+    scene = ink.Scene()
+    line = draw.orbit(scene, ink.Elements(a=2.0), view=(0.3, 0.0), body_radius=1.0, arrows=(0.25, 0.5))
+    (front,), (hidden,) = _lines(scene, st.ORBIT), _lines(scene, st.HIDDEN)
+    assert line is front
+    assert np.all(np.hypot(*hidden.points.T) <= 1.0 + 1e-9)
+    assert np.allclose(front.points[[0, -1]], hidden.points[[-1, 0]])
+    (arrow,) = [i for i in scene.items if isinstance(i, Arrowhead)]
+    assert np.allclose(arrow.at, [2.0, 0.0], atol=1e-3)
+
+
+def test_orbit_without_view_is_unchanged():
+    a, b = ink.Scene(), ink.Scene()
+    draw.orbit(a, ELLIPSE, label="orbit")
+    draw.orbit(b, ELLIPSE, label="orbit", view=None, body_radius=1.0)
+    assert len(a.items) == len(b.items)
+    for p, q in zip(a.items, b.items, strict=True):
+        assert type(p) is type(q) and all(np.array_equal(getattr(p, k), getattr(q, k)) for k in vars(p))
+
+
+# Seen from azimuth 0 the inertial +x axis points at the viewer, tilted down by the elevation: with argp = raan = 0
+# a point at inertial (-r, 0, 0) is drawn at (0, r sin el) and lies behind the globe when r sin el < R.
+OBLIQUE = (0.2, 0.0)
+
+
+def _texts(scene):
+    return [i.text for i in scene.items if isinstance(i, Label)]
+
+
+def test_oblique_apse_line_through_the_body_is_hidden_and_the_apsis_behind_is_dropped():
+    scene = ink.Scene()
+    draw.apsides(scene, ink.Elements(a=4.0, e=0.5), body_radius=1.5, view=OBLIQUE)  # apogee 6 sin 0.2 = 1.19 < 1.5
+    assert _lines(scene, st.APSE) and _lines(scene, st.HIDDEN)
+    for line in _lines(scene, st.HIDDEN):
+        assert np.all(np.hypot(*line.points.T) <= 1.5 + 1e-9)
+    assert _texts(scene) == ["perigee"]  # no line-of-apsides label with a view
+    assert _kinds(scene).count(Marker) == 1
+
+
+def test_oblique_nodes_drop_the_node_behind_the_globe():
+    scene = ink.Scene()
+    draw.nodes(scene, ink.Elements(a=2.0, i=0.5), body_radius=1.0, view=OBLIQUE)  # descending node at (-2, 0, 0)
+    assert _texts(scene) == ["ascending node"]
+    assert _lines(scene, st.HIDDEN)
+
+
+def test_oblique_spacecraft_behind_the_globe_is_not_drawn():
+    el = ink.Elements(a=4.0, e=0.5)
+    behind, front = ink.Scene(), ink.Scene()
+    at = draw.spacecraft(behind, el, np.pi, label="sc", view=OBLIQUE, body_radius=1.5)
+    assert behind.items == [] and np.allclose(at, [0.0, 6 * np.sin(0.2)])
+    draw.spacecraft(front, el, 0.0, label="sc", view=OBLIQUE, body_radius=1.5)
+    assert _kinds(front) == [Marker, Label]

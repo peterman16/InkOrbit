@@ -1,4 +1,4 @@
-"""The four ready-made diagrams.
+"""The ready-made diagrams.
 
 Run with ``python examples/diagrams_gallery.py`` to write the images in docs/images/.
 """
@@ -36,6 +36,15 @@ def orbits_plate() -> ink.Plate:
 def hohmann_plate(**kwargs) -> ink.Plate:
     return ink.diagram(
         "hohmann", 6_678, 42_164, caption="Figure 4.1-1  Hohmann transfer to geosynchronous orbit", **kwargs
+    )
+
+
+def oblique_plate() -> ink.Plate:
+    molniya = ink.Elements(
+        a=16_000, e=0.55, i=np.radians(63.4), raan=np.radians(40), argp=np.radians(270), nu=np.radians(150)
+    )
+    return ink.diagram(
+        "orbit", molniya, view=np.radians([20, -20]), caption="Figure 3.2-2  Inclined orbit seen from above the equator"
     )
 
 
@@ -110,6 +119,9 @@ if __name__ == "__main__":
         out = OUT / f"{name}.png"
         make().savefig(out, dpi=200)
         print(f"wrote {out}")
+    out = OUT / "oblique_orbit_diagram.png"  # not in PLATES: tests/test_diagrams.py has its image test
+    oblique_plate().savefig(out, dpi=200)
+    print(f"wrote {out}")
     # Printed mode needs 300 dpi, or its thinnest pens are a pixel wide and the grain eats them.
     out = OUT / "hohmann_diagram_printed.png"
     hohmann_plate(printed=True).savefig(out, dpi=300)

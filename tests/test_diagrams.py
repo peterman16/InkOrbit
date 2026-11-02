@@ -1,4 +1,5 @@
 import itertools
+import warnings
 
 import numpy as np
 import pytest
@@ -139,3 +140,54 @@ def test_printed_plate_writes_two_colours(tmp_path):
     clean = ink.Plate("x")
     assert plate.printed is not None and clean.printed is None and ink.Plate(printed=ink.Printed()).printed
     assert plate._repr_png_()[:4] == b"\x89PNG"
+
+
+# The KAN-24 mock-up orbit: a Molniya-like ellipse, km and radians.
+MOCKUP = ink.Elements(
+    a=16_000, e=0.55, i=np.radians(63.4), raan=np.radians(40), argp=np.radians(270), nu=np.radians(150)
+)
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_oblique_orbit_diagram():
+    return ink.diagram("orbit", MOCKUP, view=np.radians([20, -20])).render().figure
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_oblique_orbits_diagram():
+    plate = ink.diagram(
+        "orbits", ink.Elements(a=10_000), MOCKUP, names=["equatorial", "inclined"], view=np.radians([45, -20])
+    )
+    return plate.render().figure
+
+
+def test_oblique_orbit_diagram_drops_angles_and_vectors_but_keeps_the_table():
+    plate = ink.diagram("orbit", MOCKUP, view=np.radians([20, -20]))
+    assert not {"ω", "ν", "r̄", "v̄"} & set(_labels(plate))
+    assert plate.scene.notes == ink.diagram("orbit", MOCKUP).scene.notes
+
+
+def test_oblique_orbits_diagram_has_no_axes():
+    with pytest.raises(ValueError, match="axes"):
+        ink.diagram("orbits", MOCKUP, axes=True, view=(0.3, 0.0))
+
+
+def test_camera_near_the_orbit_plane_warns():
+    # For an equatorial orbit the camera's angle above the orbit plane is the elevation itself.
+    with pytest.warns(UserWarning, match="edge-on"):
+        ink.diagram("orbit", ink.Elements(a=10_000, e=0.2), view=np.radians([4, 30]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ink.diagram("orbit", ink.Elements(a=10_000, e=0.2), view=np.radians([6, 30]))
+
+
+@pytest.mark.mpl_image_compare(tolerance=2, savefig_kwargs={"dpi": 100})
+def test_oblique_hohmann_diagram():
+    return ink.diagram("hohmann", 6678, 42164, view=np.radians([25, -20])).render().figure
+
+
+def test_oblique_hohmann_keeps_the_delta_v_table_without_burn_vectors():
+    plate = ink.diagram("hohmann", 6678, 42164, view=np.radians([25, -20]))
+    assert plate.scene.notes == ink.diagram("hohmann", 6678, 42164).scene.notes
+    assert not {"Δv1", "Δv2"} & set(_labels(plate))
+    assert [i.role for i in plate.scene.items if isinstance(i, Line) and i.role == st.TRANSFER]

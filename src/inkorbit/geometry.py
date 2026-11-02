@@ -125,6 +125,56 @@ def visible_runs(points3: np.ndarray) -> list[np.ndarray]:
     return runs
 
 
+def split_behind(points3: np.ndarray, radius: float, closed: bool = False) -> list[tuple[np.ndarray, bool]]:
+    """Split a polyline of view-frame points into 2D runs in front of and behind a globe of ``radius`` at the origin.
+
+    Returns ``(run, hidden)`` pairs in path order. A point is hidden when it lies inside the globe's disc and behind
+    its near face, so a line through the body is hidden inside it too. Run ends are snapped to where the path
+    crosses the limb (or pierces the near face), and neighbouring runs share that point. A ``closed`` path (its last
+    point may repeat the first) starts at a hidden-to-front change, so a loop passing behind once gives one front
+    run and one hidden run.
+    """
+    pts = np.asarray(points3, dtype=float)
+    if closed and len(pts) > 1 and np.allclose(pts[0], pts[-1]):
+        pts = pts[:-1]
+    if len(pts) < 2:
+        return []
+    hidden = _behind(pts, radius)
+    if hidden.all() or not hidden.any():
+        return [((np.vstack([pts, pts[:1]]) if closed else pts)[:, :2], bool(hidden[0]))]
+    if closed:
+        k = int(np.argmax(hidden & ~np.roll(hidden, -1))) + 1  # the first front point after a hidden one
+        pts, hidden = np.roll(pts, -k, axis=0), np.roll(hidden, -k)
+    cuts = np.flatnonzero(hidden[1:] != hidden[:-1])
+    seam = _crossing(pts[-1], pts[0], radius)[None] if closed else np.empty((0, 3))
+    snaps = [seam, *(_crossing(pts[i], pts[i + 1], radius)[None] for i in cuts), seam]
+    bounds = np.r_[0, cuts + 1, len(pts)]
+    return [
+        (np.vstack([snaps[j], pts[a:b], snaps[j + 1]])[:, :2], bool(hidden[a]))
+        for j, (a, b) in enumerate(zip(bounds[:-1], bounds[1:], strict=True))
+    ]
+
+
+def _behind(points3: np.ndarray, radius: float) -> np.ndarray:
+    """Mask of (N, 3) view points hidden by a globe of ``radius`` at the origin: in its disc, behind its near face."""
+    rho2 = points3[:, 0] ** 2 + points3[:, 1] ** 2
+    return (rho2 < radius**2) & (points3[:, 2] < np.sqrt(np.maximum(radius**2 - rho2, 0.0)))
+
+
+def _crossing(p0: np.ndarray, p1: np.ndarray, radius: float) -> np.ndarray:
+    """First point of segment p0-p1 on the edge of the hidden region: the limb seen behind (z <= 0) or the near face."""
+    d = p1 - p0
+    roots = []
+    for k, side in ((2, -1.0), (3, 1.0)):  # |xy| = R (the disc edge), then |xyz| = R (the sphere)
+        a, b, c = d[:k] @ d[:k], 2 * p0[:k] @ d[:k], p0[:k] @ p0[:k] - radius**2
+        disc = b * b - 4 * a * c
+        if a > 0 and disc >= 0:
+            for t in ((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)):
+                if -1e-9 <= t <= 1 + 1e-9 and side * (p0[2] + t * d[2]) >= -1e-9 * radius:
+                    roots.append(t)
+    return p0 + np.clip(min(roots, default=1.0), 0.0, 1.0) * d  # a graze the tolerances miss: end at p1
+
+
 def ring_arcs(rotation: np.ndarray, radius: float, n: int = 181) -> tuple[np.ndarray, np.ndarray]:
     """Equatorial circle of ``radius`` body radii as (near, far) 2D view arcs, split where it crosses view z = 0.
 

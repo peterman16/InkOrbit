@@ -57,6 +57,19 @@ volcanoes on Mars. The features are stylised from public data (see Credits).
 
 ![Earth, the Moon and five planets with their surfaces](docs/images/globes.png)
 
+### Oblique view
+
+`view=(elevation, azimuth)` shows the orbit from a camera off its plane, with the globe
+seen from the same direction. Both angles are in radians, in the inertial (equatorial)
+frame, with azimuth measured from the vernal equinox. Parts behind the globe, or passing
+through it, are dashed.
+
+```python
+ink.diagram("orbit", orbit, view=np.radians([20, -20]))  # also "orbits" and "hohmann"
+```
+
+![Inclined orbit seen obliquely](docs/images/oblique_orbit_diagram.png)
+
 ## Printed mode
 
 `printed=True` turns the finished image into a two-colour bitmap that looks scanned from

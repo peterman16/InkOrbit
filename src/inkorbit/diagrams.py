@@ -10,6 +10,7 @@ objects; lengths are in kilometres unless the inputs carry astropy units.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 
 import numpy as np
@@ -50,6 +51,7 @@ def orbit(
     style=None,
     labels: bool = True,
     printed: bool | Printed = False,
+    view: tuple[float, float] | None = None,
 ) -> Plate:
     """One orbit in its own plane, periapsis to the right, with its elements labelled.
 
@@ -58,6 +60,11 @@ def orbit(
     inclined orbit, the line of nodes and the argument of periapsis. The
     element values are listed under the figure (``elements_table=False`` to omit).
     ``body_radius`` overrides the body's size, e.g. when the elements are not in km.
+
+    ``view=(elevation, azimuth)`` (radians) shows the orbit from an oblique camera
+    in the inertial frame instead (see :func:`inkorbit.draw.orbit`), without the
+    angle arcs and vectors; parts behind the globe are dashed. A camera within
+    5° of the orbit plane warns.
     """
     el = as_elements(orbit)
     central = resolve_body(body, [orbit])
@@ -65,17 +72,19 @@ def orbit(
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
 
-    draw.body(s, radius, body=central, surface=surface, orbit=el)
-    draw.orbit(s, el, max_radius=4 * el.periapsis)
-    draw.apsides(s, el, body_radius=radius, names=central.apsis_names)
+    _warn_edge_on(view, [el])
+    _globe(s, radius, central, surface, view, el)
+    draw.orbit(s, el, max_radius=4 * el.periapsis, view=view, body_radius=radius)
+    draw.apsides(s, el, body_radius=radius, names=central.apsis_names, view=view)
     if not np.isclose(el.i, 0.0) and el.argp:
-        draw.nodes(s, el, body_radius=radius)
-        draw.angle(s, -el.argp, 0.0, _arc_radius(el, radius) * 1.25, label="ω")
-    if vectors:
+        draw.nodes(s, el, body_radius=radius, view=view)
+        if view is None:
+            draw.angle(s, -el.argp, 0.0, _arc_radius(el, radius) * 1.25, label="ω")
+    if vectors and view is None:
         draw.radius_vector(s, el, body_radius=radius)
         draw.velocity_vector(s, el, length=0.45 * max(el.periapsis, radius))
         draw.true_anomaly(s, el, radius=_arc_radius(el, radius))
-    draw.spacecraft(s, el, label=name)
+    draw.spacecraft(s, el, label=name, view=view, body_radius=radius)
 
     if elements_table:
         s.notes = [
@@ -92,6 +101,25 @@ def orbit(
 def _arc_radius(el: Elements, body_radius: float) -> float:
     """An angle-arc radius between the body and the orbit."""
     return max(body_radius * 1.3, 0.55 * el.periapsis)
+
+
+def _globe(s, radius: float, central: Body, surface: bool, view, facing: Elements | None, frame="perifocal") -> None:
+    """The globe seen down the normal of ``facing`` as drawn in ``frame``, or from the ``view`` camera."""
+    if view is None:
+        draw.body(s, radius, body=central, surface=surface, orbit=facing, frame=frame)
+    else:
+        draw.body(s, radius, body=central, surface=surface, tilt=view[0], spin=view[1], orbit=None)
+
+
+def _warn_edge_on(view, orbits: Sequence[Elements]) -> None:
+    """Warn when the ``view`` camera lies within 5° of an orbit's plane, where the orbit collapses to a line."""
+    if view is None:
+        return
+    camera = geometry.view_rotation(*view)[2]  # the view's +z (towards the viewer) in the inertial frame
+    for el in orbits:
+        normal = geometry.orbit_view_rotation(el.i, el.raan, el.argp)[2]  # perifocal +z in the inertial frame
+        if abs(normal @ camera) < np.sin(np.radians(5)):
+            warnings.warn("the camera is within 5° of an orbit's plane: it is seen nearly edge-on", stacklevel=3)
 
 
 # --- 2. Several orbits about one body ------------------------------------------------
@@ -113,6 +141,7 @@ def orbits(
     axes: bool = False,
     grid: bool = False,
     printed: bool | Printed = False,
+    view: tuple[float, float] | None = None,
 ) -> Plate:
     """Several orbits about one body, drawn in their common plane.
 
@@ -120,9 +149,15 @@ def orbits(
     orbit is rotated by its longitude of periapsis, so coplanar orbits keep
     their true orientation. Line styles cycle through solid heavy, solid light
     and dashed unless ``roles`` says otherwise.
+
+    ``view=(elevation, azimuth)`` shows them from an oblique camera instead, as
+    in :func:`orbit`; arrays are then inertial, (N, 2) ones equatorial. A view
+    has no data axes.
     """
     if not orbits:
         raise ValueError("pass at least one orbit")
+    if axes and view is not None:
+        raise ValueError("axes=True needs the face-on drawing: an oblique view has no data axes")
     central = resolve_body(body, orbits)
     radius = body_radius if body_radius is not None else central.radius_km
     plate = Plate(
@@ -137,15 +172,26 @@ def orbits(
     )
     s = plate.scene
     sources = [as_elements(item) if _orbit_like(item) else item for item in orbits]
-    view = next((o for o in sources if isinstance(o, Elements)), None)
-    draw.body(s, radius, body=central, surface=surface, orbit=view, frame="plane")
+    elements = [o for o in sources if isinstance(o, Elements)]
+    _warn_edge_on(view, elements)
+    _globe(s, radius, central, surface, view, next(iter(elements), None), frame="plane")
     names = list(names or [])
     roles = list(roles or [])
     for k, source in enumerate(sources):
         role = roles[k] if k < len(roles) else _ROLES[k % len(_ROLES)]
         label = names[k] if k < len(names) else None
         max_radius = 4 * source.periapsis if isinstance(source, Elements) else None
-        draw.orbit(s, source, role=role, frame="plane", label=label, max_radius=max_radius, **_hug(source, radius))
+        draw.orbit(
+            s,
+            source,
+            role=role,
+            frame="plane",
+            label=label,
+            max_radius=max_radius,
+            view=view,
+            body_radius=radius,
+            **_hug(source, radius),
+        )
     return plate
 
 
@@ -170,12 +216,17 @@ def hohmann(
     style=None,
     labels: bool = True,
     printed: bool | Printed = False,
+    view: tuple[float, float] | None = None,
 ) -> Plate:
     """A Hohmann transfer between two circular coplanar orbits.
 
     Radii are numbers in km, astropy lengths, or circular ``Orbit`` objects.
     With ``delta_v`` the two burns are drawn as vectors with their Δv, and the
     totals and time of flight are listed under the figure.
+
+    ``view=(elevation, azimuth)`` shows the transfer from an oblique camera, as
+    in :func:`orbit`, with the orbits in the equator; the burn vectors are left
+    out but their totals are still listed.
     """
     r1, r2 = _radius(r_initial), _radius(r_final)
     if np.isclose(r1, r2):
@@ -194,31 +245,40 @@ def hohmann(
 
     plate = Plate(caption, page=page, style=style, labels=labels, printed=printed)
     s = plate.scene
-    draw.body(
-        s,
-        radius,
-        body=central,
-        surface=surface,
-        orbit=as_elements(given[0]) if given else Elements(a=r1),
-        frame="plane",
-    )
-    for r, name, at in ((r1, names[0], 0.62), (r2, names[1], 0.88)):
-        el = Elements(a=r)
-        draw.orbit(s, el, role=st.SECONDARY, frame="plane", label=name, label_at=at, **_hug(el, radius))
-    s.line(half, st.TRANSFER, arrows=(0.5,))
-    s.label(names[2], point_along(half, 0.3)[0], priority=2)
+    circles = [Elements(a=r1), Elements(a=r2)]
+    _warn_edge_on(view, circles)
+    _globe(s, radius, central, surface, view, as_elements(given[0]) if given else circles[0], frame="plane")
+    for el, name, at in zip(circles, names, (0.62, 0.88), strict=False):
+        draw.orbit(
+            s,
+            el,
+            role=st.SECONDARY,
+            frame="plane",
+            label=name,
+            label_at=at,
+            view=view,
+            body_radius=radius,
+            **_hug(el, radius),
+        )
+    line = draw.orbit(s, half, role=st.TRANSFER, arrows=(0.5,), view=view, body_radius=radius)
+    s.label(names[2], point_along(line.points, 0.3)[0], priority=2)
 
     start, end = half[0], half[-1]
-    s.marker(start, "dot")
-    s.marker(end, "dot")
+    if view is None:
+        s.marker(start, "dot")
+        s.marker(end, "dot")
+    else:  # the burns are at (r1, 0) and (-r2, 0) whichever way the transfer goes
+        for el, nu in zip(circles, (0.0, np.pi), strict=True):
+            draw.spacecraft(s, el, nu, marker="dot", view=view, body_radius=radius)
     if delta_v and np.isfinite(mu):
         dv1 = np.sqrt(mu * (2 / r1 - 1 / a)) - np.sqrt(mu / r1)
         dv2 = np.sqrt(mu / r2) - np.sqrt(mu * (2 / r2 - 1 / a))
         tof = np.pi * np.sqrt(a**3 / mu)
         # Burns are tangential: +y at the start (right), -y at the end (left), scaled for visibility.
         burn = 0.25 * max(r1, r2)
-        draw.vector(s, start, start + np.array([0.0, burn * np.sign(dv1)]), label="Δv1")
-        draw.vector(s, end, end + np.array([0.0, -burn * np.sign(dv2)]), label="Δv2")
+        if view is None:
+            draw.vector(s, start, start + np.array([0.0, burn * np.sign(dv1)]), label="Δv1")
+            draw.vector(s, end, end + np.array([0.0, -burn * np.sign(dv2)]), label="Δv2")
         s.notes = [
             f"Δv1 = {dv1:+.3f} km/s",
             f"Δv2 = {dv2:+.3f} km/s",
