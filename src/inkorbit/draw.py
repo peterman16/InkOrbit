@@ -214,7 +214,12 @@ def body(
 
 def _ring_half(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, rings, near: bool) -> None:
     """Near or far half of each ring band: stipple in its tone and edge arcs; near bands first blank what is behind."""
-    spacing = dict(zip(("light", "medium", "dense"), st.DEFAULT_STYLE.ring_stipple_mm, strict=True))
+    style = st.DEFAULT_STYLE
+    spacing = {
+        "light": style.ring_light_stipple_mm,
+        "medium": style.ring_medium_stipple_mm,
+        "dense": style.ring_dense_stipple_mm,
+    }
     bands = []
     for inner, outer, tone in rings:
         arcs = [c + radius * geo.ring_arcs(rotation, r)[0 if near else 1] for r in (inner, outer)]

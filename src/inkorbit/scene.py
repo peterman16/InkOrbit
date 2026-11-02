@@ -23,6 +23,7 @@ VAlign = Literal["baseline", "bottom", "center", "top"]
 MarkerKind = Literal["dot", "open", "star"]
 Pattern = Literal["stipple", "hatch", "solid", "paper"]
 Direction = Literal["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+Size = float | str | None  # mm; a Style field name; or None for the layout default
 
 
 def _xy(value: ArrayLike2) -> np.ndarray:
@@ -49,7 +50,7 @@ class Line:
 class Fill:
     polygon: np.ndarray
     pattern: Pattern = "stipple"
-    spacing_mm: float | None = None
+    spacing_mm: Size = None
     seed: int | None = None  # stipple randomness; defaults to the fill's position in the scene
 
 
@@ -57,21 +58,21 @@ class Fill:
 class Arrowhead:
     at: np.ndarray
     direction: np.ndarray
-    size_mm: float | None = None
+    size_mm: Size = None
 
 
 @dataclass(frozen=True)
 class Marker:
     at: np.ndarray
     kind: MarkerKind = "dot"
-    size_mm: float | None = None
+    size_mm: Size = None
 
 
 @dataclass(frozen=True)
 class Text:
     text: str
     at: np.ndarray
-    height_mm: float | None = None
+    height_mm: Size = None
     ha: HAlign = "left"
     va: VAlign = "baseline"
     rotation_deg: float = 0.0
@@ -87,7 +88,7 @@ class Label:
     at: np.ndarray
     prefer: Direction | None = None
     priority: int = 0
-    height_mm: float | None = None
+    height_mm: Size = None
     bold: bool = False
     alternatives: np.ndarray | None = None  # other acceptable anchors, in order of preference
 
@@ -138,7 +139,7 @@ class Scene:
     def fill(self, polygon, pattern: Pattern = "stipple", *, spacing_mm=None, seed=None) -> Fill:
         return self.add(Fill(_polyline(polygon), pattern, spacing_mm, seed))
 
-    def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: float | None = None) -> Arrowhead:
+    def arrowhead(self, at: ArrayLike2, direction: ArrayLike2, size_mm: Size = None) -> Arrowhead:
         return self.add(Arrowhead(_xy(at), _xy(direction), size_mm))
 
     def vector(self, start: ArrayLike2, end: ArrayLike2, role: str = _style.ORBIT) -> Line:
@@ -148,7 +149,7 @@ class Scene:
         self.add(Arrowhead(end, end - start))
         return line
 
-    def marker(self, at: ArrayLike2, kind: MarkerKind = "dot", size_mm: float | None = None) -> Marker:
+    def marker(self, at: ArrayLike2, kind: MarkerKind = "dot", size_mm: Size = None) -> Marker:
         return self.add(Marker(_xy(at), kind, size_mm))
 
     def text(
@@ -156,7 +157,7 @@ class Scene:
         text: str,
         at: ArrayLike2,
         *,
-        height_mm: float | None = None,
+        height_mm: Size = None,
         ha: HAlign = "left",
         va: VAlign = "baseline",
         rotation_deg: float = 0.0,
@@ -172,7 +173,7 @@ class Scene:
         *,
         prefer: Direction | None = None,
         priority: int = 0,
-        height_mm: float | None = None,
+        height_mm: Size = None,
         bold: bool = False,
         alternatives=None,
     ) -> Label:

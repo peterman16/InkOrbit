@@ -214,8 +214,15 @@ def test_rocky_globe_renders_the_same_twice():
     assert np.array_equal(png(), png())
 
 
+RING_TONES = (
+    st.DEFAULT_STYLE.ring_light_stipple_mm,
+    st.DEFAULT_STYLE.ring_medium_stipple_mm,
+    st.DEFAULT_STYLE.ring_dense_stipple_mm,
+)
+
+
 def _ring_stipples(scene):
-    return [i for i in scene.items if isinstance(i, Fill) and i.spacing_mm in st.DEFAULT_STYLE.ring_stipple_mm]
+    return [i for i in scene.items if isinstance(i, Fill) and i.spacing_mm in RING_TONES]
 
 
 def test_saturn_surface_adds_ring_bands_and_other_bodies_are_unchanged():

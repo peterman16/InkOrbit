@@ -57,6 +57,25 @@ def test_star_marker_is_a_ten_point_solid_around_its_position():
     assert np.allclose(np.hypot(*(star.polygon - d.to_page((1, 1))).T).max(), d.style.marker_mm)
 
 
+def test_sizes_given_by_name_are_resolved_from_the_style():
+    def sizes(style):
+        scene = _scene()
+        scene.marker((1, 1), size_mm="station_marker_mm")
+        scene.text("H", (2, 2), height_mm="symbol_height_mm")
+        d = ink.layout(scene, style=style)
+        (dot,) = [i for i in d.items if isinstance(i, Solid)]
+        letter = np.vstack([i.points for i in d.items if isinstance(i, Stroke) and i.role is None])
+        return np.ptp(dot.polygon[:, 0]), np.ptp(letter[:, 1])
+
+    assert sizes(ink.Style()) == pytest.approx((1.4, 3.2))
+    big = ink.Style(station_marker_mm=2.5, symbol_height_mm=5.0)
+    assert sizes(big) == pytest.approx((2.5, 5.0))
+    scene = _scene()
+    scene.marker((0, 0), size_mm="nope")
+    with pytest.raises(ValueError, match="no size named"):
+        ink.layout(scene)
+
+
 def test_unknown_role_and_page():
     scene = ink.Scene()
     scene.line([[0, 0], [1, 1]], "nonsense")
