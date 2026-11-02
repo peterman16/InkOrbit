@@ -1,3 +1,5 @@
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -5,6 +7,7 @@ import inkorbit as ink
 from inkorbit import draw
 from inkorbit import geometry as geo
 from inkorbit import style as st
+from inkorbit.layout import Dots
 from inkorbit.scene import Arrowhead, Fill, Label, Line, Marker
 
 ELLIPSE = ink.Elements(a=2.6, e=0.55, nu=np.radians(110))
@@ -181,14 +184,14 @@ def _fills(name, spacing, spin=0.0):
 
 
 def test_moon_regions_are_stippled_in_two_tones_and_mars_has_none():
-    for spacing in (st.DEFAULT_STYLE.region_stipple_mm, st.DEFAULT_STYLE.region_core_stipple_mm):
+    for spacing in ("region_stipple_mm", "region_core_stipple_mm"):
         assert _fills("moon", spacing)
         assert not _fills("mars", spacing)  # no region data for Mars
 
 
 @pytest.mark.parametrize("name", ["moon", "mercury", "venus", "mars"])
 def test_rocky_bodies_get_crater_shadows_and_rims(name):
-    assert _fills(name, st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+    assert _fills(name, "crater_shadow_stipple_mm")
     s = ink.Scene()
     draw.body(s, 1.0, body=name, surface=True)
     assert _surface_lines(s)
@@ -196,12 +199,23 @@ def test_rocky_bodies_get_crater_shadows_and_rims(name):
 
 def test_crater_shadows_stay_small_across_the_antimeridian():
     # Facing longitude 180: a shadow ring crossing it must not become a band around the globe.
-    shadows = _fills("moon", st.DEFAULT_STYLE.crater_shadow_stipple_mm, spin=np.pi)
+    shadows = _fills("moon", "crater_shadow_stipple_mm", spin=np.pi)
     assert shadows and max(_area(f.polygon) for f in shadows) < 0.05
 
 
+def _dots(scene, style):
+    return sum(len(i.points) for i in ink.layout(scene, style=style).items if isinstance(i, Dots))
+
+
+def test_a_custom_style_changes_the_maria_stipple():
+    s = ink.Scene()
+    draw.body(s, 1.0, body="moon", surface=True, sun=None)
+    coarse = dataclasses.replace(st.DEFAULT_STYLE, region_stipple_mm=1.4)
+    assert _dots(s, coarse) < _dots(s, st.DEFAULT_STYLE)
+
+
 def test_some_crater_floors_are_cut_out_of_the_maria():
-    maria = _fills("moon", st.DEFAULT_STYLE.region_stipple_mm)
+    maria = _fills("moon", "region_stipple_mm")
     assert any(len(f.polygon) > 1 + len(np.unique(f.polygon, axis=0)) for f in maria)  # a hole repeats the start
 
 
@@ -215,9 +229,9 @@ def test_rocky_globe_renders_the_same_twice():
 
 
 RING_TONES = (
-    st.DEFAULT_STYLE.ring_light_stipple_mm,
-    st.DEFAULT_STYLE.ring_medium_stipple_mm,
-    st.DEFAULT_STYLE.ring_dense_stipple_mm,
+    "ring_light_stipple_mm",
+    "ring_medium_stipple_mm",
+    "ring_dense_stipple_mm",
 )
 
 

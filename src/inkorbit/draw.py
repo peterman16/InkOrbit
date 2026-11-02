@@ -35,9 +35,6 @@ __all__ = [
     "velocity_vector",
 ]
 
-# Greek symbols on angles read better a little larger than running text.
-SYMBOL_HEIGHT_MM = 3.2
-
 # A line or vector that meets a globe stops this far outside its radius.
 BODY_GAP = 1.08
 
@@ -207,17 +204,11 @@ def body(
 
 def _ring_half(scene: Scene, c: np.ndarray, radius: float, rotation: np.ndarray, rings, near: bool) -> None:
     """Near or far half of each ring band: stipple in its tone and edge arcs; near bands first blank what is behind."""
-    style = st.DEFAULT_STYLE
-    spacing = {
-        "light": style.ring_light_stipple_mm,
-        "medium": style.ring_medium_stipple_mm,
-        "dense": style.ring_dense_stipple_mm,
-    }
     bands = []
     for inner, outer, tone in rings:
         arcs = [c + radius * geo.ring_arcs(rotation, r)[0 if near else 1] for r in (inner, outer)]
         if len(arcs[0]):  # pole-on there is no far half
-            bands.append((arcs, np.vstack([arcs[1], arcs[0][::-1]]), spacing[tone]))
+            bands.append((arcs, np.vstack([arcs[1], arcs[0][::-1]]), f"ring_{tone}_stipple_mm"))
     if near:
         for _, band, _ in bands:  # all knock-outs first, so one band's paper never cuts a neighbour's edge
             scene.fill(band, "paper")
@@ -237,7 +228,7 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
         # Shadows are drawn about longitude 0, then turned back, so one never straddles the antimeridian.
         shade = surfaces.shadow(lat, 0.0, r, mons)
         for poly in geo.ring_polygons(rotation @ geo.r3(-np.radians(lon)), shade):
-            scene.fill(c + radius * poly, "stipple", spacing_mm=st.DEFAULT_STYLE.crater_shadow_stipple_mm)
+            scene.fill(c + radius * poly, "stipple", spacing_mm="crater_shadow_stipple_mm")
         ring = surfaces.rim(body, i, lat, lon, r)
         points = geo.lat_lon_to_view(np.radians(ring[:, 1]), np.radians(ring[:, 0]), np.eye(3))
         smaller = [(cj, np.radians(k[2])) for cj, k in zip(centres, craters, strict=True) if k[2] < r]
@@ -249,7 +240,7 @@ def _craters_and_regions(scene: Scene, c: np.ndarray, radius: float, rotation: n
         for run in geo.visible_runs(view):
             scene.line(c + radius * run[:, :2], st.SURFACE)
     base, core = surfaces.regions(body)
-    for rings, spacing in ((base, st.DEFAULT_STYLE.region_stipple_mm), (core, st.DEFAULT_STYLE.region_core_stipple_mm)):
+    for rings, spacing in ((base, "region_stipple_mm"), (core, "region_core_stipple_mm")):
         for ring in rings:
             for poly in geo.ring_polygons(rotation, ring):
                 inside = [h for h in holes if geo.points_in_polygon(h, poly).all()]
@@ -388,11 +379,11 @@ def angle(
     pts = geo.arc(tuple(center), radius, start + sign * inset, stop - sign * inset)
     line = scene.line(pts, role)
     if arrow:
-        scene.arrowhead(pts[-1], pts[-1] - pts[-2], size_mm=2.0)
+        scene.arrowhead(pts[-1], pts[-1] - pts[-2], size_mm="angle_arrow_mm")
     if label:
         mid = (start + stop) / 2
         at = np.asarray(center, float) + radius * np.array([np.cos(mid), np.sin(mid)])
-        scene.label(label, at, prefer=_compass(mid), priority=5, height_mm=SYMBOL_HEIGHT_MM)
+        scene.label(label, at, prefer=_compass(mid), priority=5, height_mm="symbol_height_mm")
     return line
 
 
@@ -436,7 +427,7 @@ def spacecraft(
     at, hidden = _place(view, elements, body_radius, elements.position(nu, frame if view is None else "perifocal"))
     if hidden:
         return at
-    scene.marker(at, marker, size_mm=1.8 if marker == "open" else None)
+    scene.marker(at, marker, size_mm="spacecraft_marker_mm" if marker == "open" else None)
     if label:
         scene.label(label, at, prefer=_compass(np.arctan2(at[1], at[0])), priority=4)
     return at
