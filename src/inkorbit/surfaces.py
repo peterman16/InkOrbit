@@ -9,7 +9,7 @@ from importlib import resources
 import numpy as np
 
 from . import geometry
-from .bodies import Body, get_body
+from .bodies import BODIES, Body, get_body
 from .maps import _unpack, coastlines
 
 # USGS Gazetteer features are rings (centre and diameter), by kind: 0 crater, 1 mare, 2 mons, 3 planitia,
@@ -75,7 +75,10 @@ def _great_red_spot() -> np.ndarray:
 
 def _surface_data(body: Body) -> dict[str, np.ndarray]:
     """Arrays of ``body``'s bundled surface file; empty if it has none."""
-    path = resources.files("inkorbit").joinpath(f"data/{body.name.lower()}_surface.npz")
+    name = body.name.lower()
+    if name not in BODIES:  # the name becomes part of a file path
+        return {}
+    path = resources.files("inkorbit").joinpath(f"data/{name}_surface.npz")
     if not path.is_file():
         return {}
     with path.open("rb") as f:

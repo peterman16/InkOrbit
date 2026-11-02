@@ -1,3 +1,5 @@
+import io
+
 import numpy as np
 import pytest
 from diagrams_gallery import PLATES
@@ -92,3 +94,25 @@ def test_saturn_orbits_diagram():
     moons = [ink.Elements(a=a) for a in (185_539, 237_948, 294_619)]  # Mimas, Enceladus, Tethys, km
     names = ["Mimas", "Enceladus", "Tethys"]
     return ink.diagram("orbits", *moons, body="saturn", surface=True, names=names).render().figure
+
+
+@pytest.mark.parametrize("dpi", [0, -1, 2401, float("nan")])
+def test_dpi_is_capped(dpi):
+    with pytest.raises(ValueError, match="dpi"):
+        _scene_line().render().to_array(dpi=dpi)
+
+
+def test_pixel_count_is_capped():
+    with pytest.raises(ValueError, match="pixels"):
+        ink.Scene().render(page=(5000, 5000)).to_png(dpi=1200)
+
+
+def test_printed_plate_obeys_the_same_limits():
+    with pytest.raises(ValueError, match="dpi"):
+        ink.Plate(printed=True).savefig(io.BytesIO(), dpi=5000)
+
+
+def _scene_line():
+    scene = ink.Scene()
+    scene.line([[0, 0], [10, 0]], role="orbit")
+    return scene

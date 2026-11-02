@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from inkorbit import geometry, surfaces
+from inkorbit.bodies import Body
 
 
 def _sep(lat, lon, ring):
@@ -104,3 +105,11 @@ def test_saturn_rings_are_ordered_with_the_cassini_gap():
 
 def test_other_bodies_have_no_rings():
     assert surfaces.rings("jupiter") == () and surfaces.rings("earth") == ()
+
+
+def test_surface_files_are_opened_only_for_known_bodies(monkeypatch):
+    def no_files(*args):
+        raise AssertionError("touched the filesystem")
+
+    monkeypatch.setattr(surfaces.resources, "files", no_files)
+    assert surfaces._surface_data(Body("../x", 1.0, 1.0)) == {}

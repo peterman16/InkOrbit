@@ -17,6 +17,7 @@ from matplotlib.transforms import IdentityTransform
 from ..layout import Dots, Drawing, Solid, Stroke
 
 PT_PER_MM = 72 / 25.4
+MAX_DPI, MAX_PIXELS = 2400, 2 * 10**8  # generous: A4 at 1200 dpi is 1.6e8 pixels
 
 
 @dataclass
@@ -30,6 +31,13 @@ class RenderedFigure:
     drawing: Drawing
 
     def savefig(self, path, dpi: int = 300, **kwargs) -> None:
+        # Every bitmap path (to_png, to_array, a printed Plate) goes through here, so the limits live here.
+        if not 0 < dpi <= MAX_DPI:
+            raise ValueError(f"dpi must be in (0, {MAX_DPI}], got {dpi}")
+        page = self.drawing.page
+        pixels = page.width_mm * page.height_mm / 25.4**2 * dpi**2
+        if pixels > MAX_PIXELS:
+            raise ValueError(f"{pixels:.3g} pixels at {dpi} dpi exceeds the limit of {MAX_PIXELS}; lower the dpi")
         kwargs.setdefault("facecolor", self.drawing.style.paper)
         self.figure.savefig(path, dpi=dpi, **kwargs)
 

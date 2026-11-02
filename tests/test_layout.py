@@ -73,3 +73,28 @@ def test_paper_fill_resolves_to_paper_solid():
     scene.fill([[0, 0], [5, 0], [5, 5], [0, 5]], "paper")
     scene.fill([[0, 0], [5, 0], [5, 5]], "solid")
     assert [(type(i), i.paper) for i in ink.layout(scene).items] == [(Solid, True), (Solid, False)]
+
+
+def _filled(pattern, spacing):
+    scene = ink.Scene()
+    scene.fill([[0, 0], [10, 0], [10, 10], [0, 10]], pattern, spacing_mm=spacing)
+    return scene
+
+
+@pytest.mark.parametrize("pattern", ["stipple", "hatch"])
+@pytest.mark.parametrize("spacing", [0, 0.01, -1, float("nan"), float("inf")])
+def test_fill_spacing_must_be_finite_and_at_least_the_minimum(pattern, spacing):
+    with pytest.raises(ValueError, match="fill spacing"):
+        ink.layout(_filled(pattern, spacing))
+
+
+@pytest.mark.parametrize("pattern", ["stipple", "hatch"])
+def test_fill_spacing_none_means_the_style_default_and_the_minimum_is_allowed(pattern):
+    ink.layout(_filled(pattern, None))
+    ink.layout(_filled(pattern, ink.DEFAULT_STYLE.min_spacing_mm))
+
+
+@pytest.mark.parametrize("size", [(0, 100), (100, -5), (float("nan"), 100), (100, float("inf"))])
+def test_page_size_must_be_finite_and_positive(size):
+    with pytest.raises(ValueError, match="page size"):
+        ink.layout(_scene(), size)
